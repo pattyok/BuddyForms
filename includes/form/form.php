@@ -2,20 +2,27 @@
 
 /**
  * Adds a form shortcode for the create and edit screen
- * @var $args = posttype, the_post, post_id
  *
- * @package buddyforms
- * @since 0.1-beta
+ * @param $args
+ * @param bool $echo
+ *
+ *
+ * @since 2.5.1 Added the parameter $echo to return the output instead of echo it directly
+ * @since 2.4.0 The function only return string or empty
+ *
+ * @return string|void
  */
-
-function buddyforms_create_edit_form( $args ) {
+function buddyforms_create_edit_form( $args, $echo = true ) {
 	global $current_user, $buddyforms, $wp_query, $bf_form_response_args, $bf_form_error;
 
 	// First check if any form error exist
 	if ( ! empty( $bf_form_error ) ) {
-		echo '<div class="bf-alert error">' . $bf_form_error . '</div>';
-
-		return false;
+		$echo_content = '<div class="bf-alert error">' . $bf_form_error . '</div>';
+		if ( $echo ) {
+			echo $echo_content;
+		} else {
+			return $echo_content;
+		}
 	}
 
 	do_action( 'buddyforms_create_edit_form_loader' );
@@ -27,6 +34,7 @@ function buddyforms_create_edit_form( $args ) {
 	$the_post    = 0;
 	$post_id     = 0;
 	$post_parent = 0;
+	$post_status = '';
 	$form_slug   = false;
 	$form_notice = '';
 
@@ -42,7 +50,7 @@ function buddyforms_create_edit_form( $args ) {
 	extract( $short_array );
 
 	if ( empty( $buddyforms[ $form_slug ] ) ) {
-		return false;
+		return '';
 	}
 
 	buddyforms_switch_to_form_blog( $form_slug );
@@ -75,25 +83,24 @@ function buddyforms_create_edit_form( $args ) {
 	}
 
 	// if post edit screen is displayed in pages
-	if ( isset( $wp_query->query_vars['bf_action'] ) ) {
+	if ( !empty( $wp_query->query_vars['bf_action'] ) ) {
 
-		$form_slug = '';
-		if ( isset( $wp_query->query_vars['bf_form_slug'] ) ) {
+		if ( !empty( $wp_query->query_vars['bf_form_slug'] ) ) {
 			$form_slug = $wp_query->query_vars['bf_form_slug'];
 		}
 
 		$post_id = 0;
-		if ( isset( $wp_query->query_vars['bf_post_id'] ) ) {
+		if ( !empty( $wp_query->query_vars['bf_post_id'] ) ) {
 			$post_id = $wp_query->query_vars['bf_post_id'];
 		}
 
 		$post_parent = 0;
-		if ( isset( $wp_query->query_vars['bf_parent_post_id'] ) ) {
+		if ( !empty( $wp_query->query_vars['bf_parent_post_id'] ) ) {
 			$post_parent = $wp_query->query_vars['bf_parent_post_id'];
 		}
 
 		$revision_id = 0;
-		if ( isset( $wp_query->query_vars['bf_rev_id'] ) ) {
+		if ( !empty( $wp_query->query_vars['bf_rev_id'] ) ) {
 			$revision_id = $wp_query->query_vars['bf_rev_id'];
 		}
 
@@ -116,9 +123,12 @@ function buddyforms_create_edit_form( $args ) {
 
 			if ( $user_can_edit == false ) {
 				$error_message = apply_filters( 'buddyforms_user_can_edit_error_message', __( 'You are not allowed to edit this post. What are you doing here?', 'buddyforms' ) );
-				echo '<div class="bf-alert error">' . $error_message . '</div>';
-
-				return false;
+				$echo_content = '<div class="bf-alert error">' . $error_message . '</div>';
+				if ( $echo ) {
+					echo $echo_content;
+				} else {
+					return $echo_content;
+				}
 			}
 
 		}
@@ -143,47 +153,66 @@ function buddyforms_create_edit_form( $args ) {
 
 		if ( $user_can_edit == false ) {
 			$error_message = apply_filters( 'buddyforms_user_can_edit_error_message', __( 'You are not allowed to edit this post. What are you doing here?', 'buddyforms' ) );
-			echo '<div class="bf-alert error">' . $error_message . '</div>';
-
-			return false;
+			$echo_content = '<div class="bf-alert error">' . $error_message . '</div>';
+			if ( $echo ) {
+				echo $echo_content;
+			} else {
+				return $echo_content;
+			}
 		}
 	}
 
 	// If post_id == 0 a new post is created
 	if ( $post_id == 0 ) {
-		require_once( ABSPATH . 'wp-admin/includes/admin.php' );
-		$the_post = get_default_post_to_edit( $post_type );
+		//check if auto-draft exist
+		global $wpdb;
+		$query   = $wpdb->prepare("SELECT ID FROM {$wpdb->posts} WHERE 1=1  AND post_title ='Auto Draft' AND post_content = '' AND post_author = %s AND post_type = %s ORDER BY ID DESC", $current_user->ID, $post_type);
+		$post_id = (int) $wpdb->get_var( $query );
+		if ( empty( $post_id ) ) {
+			$the_post = bf_get_default_post_to_edit( $post_type, true );
+			$post_id = $the_post->ID;
+		}
 	}
 
 	if ( empty( $post_type ) ) {
-		$post_type = $the_post->post_type;
-	} //buddyforms??
+		$post_type = $the_post->post_type;//buddyforms??
+	}
 
 	if ( empty( $form_slug ) ) {
 		$form_slug = apply_filters( 'buddyforms_the_form_to_use', $form_slug, $post_type );
 	}
 
 	if ( ! isset( $buddyforms[ $form_slug ]['form_fields'] ) ) {
-		$error_message = apply_filters( 'buddyforms_no_form_elements_error_message', __( 'This form has no fields jet. Nothing to fill out so far. Add fields to your form to make it useful.', 'buddyforms' ) );
-		echo '<div class="bf-alert error">' . $error_message . '</div>';
-
-		return false;
+		$error_message = apply_filters( 'buddyforms_no_form_elements_error_message', __( 'This form has no fields yet. Nothing to fill out so far. Add fields to your form to make it useful.', 'buddyforms' ) );
+		$echo_content = '<div class="bf-alert error">' . $error_message . '</div>';
+		if ( $echo ) {
+			echo $echo_content;
+		} else {
+			return $echo_content;
+		}
 	}
 
-	$customfields = $buddyforms[ $form_slug ]['form_fields'];
+	$customfields = ( ! empty( $buddyforms[ $form_slug ]['form_fields'] ) ) ? $buddyforms[ $form_slug ]['form_fields'] : array();
 
-	if ( ! empty( $the_post ) && ! empty( $the_post->post_parent ) ) {
-		$post_parent = $the_post->post_parent;
+	if ( ! empty( $the_post ) ) {
+		if(empty($post_parent) && ! empty( $the_post->post_parent )) {
+			$post_parent = $the_post->post_parent;
+		}
+		if(empty($post_status) && ! empty( $the_post->post_status )) {
+			$post_status = $the_post->post_status;
+		}
 	}
 
 	$args = array(
 		'post_type'    => $post_type,
 		'the_post'     => $the_post,
 		'post_parent'  => $post_parent,
+		'post_status'  => $post_status,
 		'customfields' => $customfields,
 		'post_id'      => apply_filters( 'buddyforms_set_post_id_for_draft', $post_id, $args, $customfields ),
 		'form_slug'    => $form_slug,
 		'form_notice'  => $form_notice,
+		'current_user' => $current_user
 	);
 
 	if ( isset( $_POST['form_slug'] ) ) {
@@ -204,9 +233,11 @@ function buddyforms_create_edit_form( $args ) {
 		$args['form_notice'] = $display_message;
 
 		if ( isset( $_POST['bf_submitted'] ) && $buddyforms[ $_POST['form_slug'] ]['after_submit'] == 'display_message' ) {
-			echo $display_message;
-
-			return false;
+			if ( $echo ) {
+				echo $display_message;
+			} else {
+				return $display_message;
+			}
 		}
 	}
 
@@ -214,7 +245,12 @@ function buddyforms_create_edit_form( $args ) {
 		$args = $bf_form_response_args;
 	}
 
-	echo buddyforms_form_html( $args );
+	$echo_content = buddyforms_form_html( $args );
+	if ( $echo ) {
+		echo $echo_content;
+	} else {
+		return $echo_content;
+	}
 
 	if ( buddyforms_is_multisite() ) {
 		restore_current_blog();
@@ -222,7 +258,103 @@ function buddyforms_create_edit_form( $args ) {
 }
 
 /**
- * Save the submited for, amd create a global arry with the response array
+ * Default post information to use when populating the "Write Post" form.
+ *
+ * @note modification of the original function `get_default_post_to_edit` to not set any post format with `set_post_format`
+ *
+ * @since 2.5.1
+ *
+ * @param string $post_type    Optional. A post type string. Default 'post'.
+ * @param bool   $create_in_db Optional. Whether to insert the post into database. Default false.
+ * @return WP_Post Post object containing all the default post data as attributes
+ */
+function bf_get_default_post_to_edit( $post_type = 'post', $create_in_db = false ) {
+	$post_title = '';
+	if ( ! empty( $_REQUEST['post_title'] ) ) {
+		$post_title = esc_html( wp_unslash( $_REQUEST['post_title'] ) );
+	}
+
+	$post_content = '';
+	if ( ! empty( $_REQUEST['content'] ) ) {
+		$post_content = esc_html( wp_unslash( $_REQUEST['content'] ) );
+	}
+
+	$post_excerpt = '';
+	if ( ! empty( $_REQUEST['excerpt'] ) ) {
+		$post_excerpt = esc_html( wp_unslash( $_REQUEST['excerpt'] ) );
+	}
+
+	if ( $create_in_db ) {
+		$post_id = wp_insert_post(
+			array(
+				'post_title'  => __( 'Auto Draft' ),
+				'post_type'   => $post_type,
+				'post_status' => 'auto-draft',
+			)
+		);
+		$post    = get_post( $post_id );
+
+		// Schedule auto-draft cleanup
+		if ( ! wp_next_scheduled( 'wp_scheduled_auto_draft_delete' ) ) {
+			wp_schedule_event( time(), 'daily', 'wp_scheduled_auto_draft_delete' );
+		}
+	} else {
+		$post                 = new stdClass;
+		$post->ID             = 0;
+		$post->post_author    = '';
+		$post->post_date      = '';
+		$post->post_date_gmt  = '';
+		$post->post_password  = '';
+		$post->post_name      = '';
+		$post->post_type      = $post_type;
+		$post->post_status    = 'draft';
+		$post->to_ping        = '';
+		$post->pinged         = '';
+		$post->comment_status = get_default_comment_status( $post_type );
+		$post->ping_status    = get_default_comment_status( $post_type, 'pingback' );
+		$post->post_pingback  = get_option( 'default_pingback_flag' );
+		$post->post_category  = get_option( 'default_category' );
+		$post->page_template  = 'default';
+		$post->post_parent    = 0;
+		$post->menu_order     = 0;
+		$post                 = new WP_Post( $post );
+	}
+
+	/**
+	 * Filters the default post content initially used in the "Write Post" form.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @param string  $post_content Default post content.
+	 * @param WP_Post $post         Post object.
+	 */
+	$post->post_content = (string) apply_filters( 'default_content', $post_content, $post );
+
+	/**
+	 * Filters the default post title initially used in the "Write Post" form.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @param string  $post_title Default post title.
+	 * @param WP_Post $post       Post object.
+	 */
+	$post->post_title = (string) apply_filters( 'default_title', $post_title, $post );
+
+	/**
+	 * Filters the default post excerpt initially used in the "Write Post" form.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @param string  $post_excerpt Default post excerpt.
+	 * @param WP_Post $post         Post object.
+	 */
+	$post->post_excerpt = (string) apply_filters( 'default_excerpt', $post_excerpt, $post );
+
+	return $post;
+}
+
+/**
+ * Save the submited form and create a global array with the response array
  *
  * @package buddyforms
  * @since 1.5

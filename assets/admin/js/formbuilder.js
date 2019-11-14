@@ -1,3 +1,128 @@
+/**
+ * Hooks object
+ *
+ * This object needs to be declared early so that it can be used in code.
+ * Preferably at a global scope.
+ */
+var BuddyFormsBuilderHooks = BuddyFormsBuilderHooks || {};
+
+BuddyFormsBuilderHooks.actions = BuddyFormsBuilderHooks.actions || {};
+BuddyFormsBuilderHooks.filters = BuddyFormsBuilderHooks.filters || {};
+
+/**
+ * Add a new Action callback to BuddyFormsBuilderHooks.actions
+ *
+ * @param tag The tag specified by do_action()
+ * @param callback The callback function to call when do_action() is called
+ * @param priority The order in which to call the callbacks. Default: 10 (like WordPress)
+ */
+BuddyFormsBuilderHooks.addAction = function (tag, callback, priority) {
+    if (typeof priority === "undefined") {
+        priority = 10;
+    }
+    // If the tag doesn't exist, create it.
+    BuddyFormsBuilderHooks.actions[tag] = BuddyFormsBuilderHooks.actions[tag] || [];
+    BuddyFormsBuilderHooks.actions[tag].push({priority: priority, callback: callback});
+};
+
+/**
+ * Add a new Filter callback to BuddyFormsBuilderHooks.filters
+ *
+ * @param tag The tag specified by apply_filters()
+ * @param callback The callback function to call when apply_filters() is called
+ * @param priority Priority of filter to apply. Default: 10 (like WordPress)
+ */
+BuddyFormsBuilderHooks.addFilter = function (tag, callback, priority) {
+    if (typeof priority === "undefined") {
+        priority = 10;
+    }
+    // If the tag doesn't exist, create it.
+    BuddyFormsBuilderHooks.filters[tag] = BuddyFormsBuilderHooks.filters[tag] || [];
+    BuddyFormsBuilderHooks.filters[tag].push({priority: priority, callback: callback});
+};
+
+/**
+ * Remove an Action callback from BuddyFormsBuilderHooks.actions
+ *
+ * Must be the exact same callback signature.
+ * Warning: Anonymous functions can not be removed.
+ * @param tag The tag specified by do_action()
+ * @param callback The callback function to remove
+ */
+BuddyFormsBuilderHooks.removeAction = function (tag, callback) {
+    BuddyFormsBuilderHooks.actions[tag] = BuddyFormsBuilderHooks.actions[tag] || [];
+    BuddyFormsBuilderHooks.actions[tag].forEach(function (filter, i) {
+        if (filter.callback === callback) {
+            BuddyFormsBuilderHooks.actions[tag].splice(i, 1);
+        }
+    });
+};
+
+/**
+ * Remove a Filter callback from BuddyFormsBuilderHooks.filters
+ *
+ * Must be the exact same callback signature.
+ * Warning: Anonymous functions can not be removed.
+ * @param tag The tag specified by apply_filters()
+ * @param callback The callback function to remove
+ */
+BuddyFormsBuilderHooks.removeFilter = function (tag, callback) {
+    BuddyFormsBuilderHooks.filters[tag] = BuddyFormsBuilderHooks.filters[tag] || [];
+    BuddyFormsBuilderHooks.filters[tag].forEach(function (filter, i) {
+        if (filter.callback === callback) {
+            BuddyFormsBuilderHooks.filters[tag].splice(i, 1);
+        }
+    });
+};
+
+/**
+ * Calls actions that are stored in BuddyFormsBuilderHooks.actions for a specific tag or nothing
+ * if there are no actions to call.
+ *
+ * @param tag A registered tag in Hook.actions
+ * @param options Optional JavaScript object to pass to the callbacks
+ */
+BuddyFormsBuilderHooks.doAction = function (tag, options) {
+    var actions = [];
+    if (typeof BuddyFormsBuilderHooks.actions[tag] !== "undefined" && BuddyFormsBuilderHooks.actions[tag].length > 0) {
+        BuddyFormsBuilderHooks.actions[tag].forEach(function (hook) {
+            actions[hook.priority] = actions[hook.priority] || [];
+            actions[hook.priority].push(hook.callback);
+        });
+
+        actions.forEach(function (BuddyFormsBuilderHooks) {
+            BuddyFormsBuilderHooks.forEach(function (callback) {
+                callback(options);
+            });
+        });
+    }
+};
+
+/**
+ * Calls filters that are stored in BuddyFormsBuilderHooks.filters for a specific tag or return
+ * original value if no filters exist.
+ *
+ * @param tag A registered tag in Hook.filters
+ * @param value The value
+ * @param options Optional JavaScript object to pass to the callbacks
+ * @options
+ */
+BuddyFormsBuilderHooks.applyFilters = function (tag, value, options) {
+    var filters = [];
+    if (typeof BuddyFormsBuilderHooks.filters[tag] !== "undefined" && BuddyFormsBuilderHooks.filters[tag].length > 0) {
+        BuddyFormsBuilderHooks.filters[tag].forEach(function (hook) {
+            filters[hook.priority] = filters[hook.priority] || [];
+            filters[hook.priority].push(hook.callback);
+        });
+        filters.forEach(function (BuddyFormsBuilderHook) {
+            BuddyFormsBuilderHook.forEach(function (callback) {
+                value = callback(value, options);
+            });
+        });
+    }
+    return value;
+};
+
 // On Load jQuery
 jQuery(function () {
 
@@ -46,9 +171,28 @@ jQuery(function () {
 		}
 	});
 
+	jQuery(document).on('buddyform:load_notifications', function () {
+		var buddyforms_notification_builder = jQuery(this).find('.buddyforms_accordion_notification');
+		if (buddyforms_notification_builder.length > 0) {
+			var accordionNotificationContainer = buddyforms_notification_builder.find("li.bf_trigger_list_item");
+			jQuery.each(accordionNotificationContainer, function(){
+				var currentAccordionNotificationContainer = jQuery(this);
+				if (!currentAccordionNotificationContainer.hasClass('buddyforms-ready')) {
+					currentAccordionNotificationContainer.accordion({
+						collapsible: true,
+						active: false,
+						header: "div.accordion-heading-options",
+						heightStyle: "content"
+					});
+					currentAccordionNotificationContainer.addClass('buddyforms-ready');
+				}
+			});
+		}
+	});
 });
 jQuery(document).ready(function () {
 	jQuery(document.body).trigger({type: "buddyform:load_fields"});
+	jQuery(document.body).trigger({type: "buddyform:load_notifications"});
 
 	//
 	// Handle the hide/show moderation of user on update
@@ -107,9 +251,10 @@ jQuery(document).ready(function () {
 		if (post_id == undefined)
 			post_id = 0;
 
-		var fieldtype = jQuery('#bf_add_new_form_element').val();
+		var addElement = jQuery('#bf_add_new_form_element');
+		var fieldType = addElement.val();
 
-		if (fieldtype === 'none') {
+		if (fieldType === 'none') {
 			jQuery('#bf_add_new_form_element_modal').val('none');
 
 			jQuery('#formbuilder-action-select-modal').dialog({
@@ -121,72 +266,82 @@ jQuery(document).ready(function () {
 			return false;
 		}
 
-		var unique = jQuery('#bf_add_new_form_element').find(':selected').data('unique');
-		var exist = jQuery("#sortable_buddyforms_elements .bf_" + fieldtype);
+		var unique = addElement.find(':selected').data('unique');
+		var search4Element = jQuery("#sortable_buddyforms_elements .bf_" + fieldType);
 
 		if (unique === 'unique') {
-			if (exist !== null && typeof exist === 'object' && exist.length > 0) {
+			if (search4Element !== null && typeof search4Element === 'object' && search4Element.length > 0) {
 				bf_alert('This element can only be added once into each form');
 				jQuery('.formbuilder-spinner').removeClass('is-active');
 				return false;
 			}
 		}
 
-		jQuery.ajax({
-			type: 'POST',
-			url: ajaxurl,
-			data: {
-				"action": "buddyforms_display_form_element",
-				"fieldtype": fieldtype,
-				"unique": unique,
-				"post_id": post_id
-			},
-			success: function (data) {
-				if (data == 'unique') {
-					bf_alert('This element can only be added once into each form');
-					return false;
-				}
+		var addNewElement = BuddyFormsBuilderHooks.applyFilters('buddyforms:add_new_form_element', true, {addElement: addElement, fieldType: fieldType, search4Element: search4Element, unique: unique});
 
-				jQuery('.buddyforms_template').remove();
-
-				data = data.replace('accordion-body collapse', 'accordion-body in collapse');
-
-				jQuery('#sortable_buddyforms_elements').append(data);
-				jQuery('.formbuilder-spinner').removeClass('is-active');
-
-				bf_update_list_item_number();
-
-				jQuery('#buddyforms_form_elements').removeClass('closed');
-				jQuery("html, body").animate({scrollTop: jQuery('#buddyforms_form_elements ul li:last').offset().top - 200}, 1000);
-				jQuery('.bf-select2').select2();
-
-				var form_post_type = jQuery('#form_post_type').val();
-
-				if (form_post_type == 'bf_submissions') {
-
-					var field_id = jQuery(data).find('#this_field_id').val();
-
-					bf_taxonomy_input(field_id)
-				}
-				jQuery(document.body).trigger({type: "buddyform:load_fields"});
-			},
-			error: function () {
-				jQuery('.formbuilder-spinner').removeClass('is-active');
-				jQuery('<div></div>').dialog({
-					modal: true,
-					title: "Info",
-					open: function () {
-						var markup = 'Something went wrong ;-(sorry)';
-						jQuery(this).html(markup);
+		if(addNewElement) {
+			if (buddyformsGlobal) {
+				jQuery.ajax({
+					type: 'POST',
+					url: buddyformsGlobal.admin_url,
+					data: {
+						"action": "buddyforms_display_form_element",
+						"fieldtype": fieldType,
+						"unique": unique,
+						"post_id": post_id
 					},
-					buttons: {
-						Ok: function () {
-							jQuery(this).dialog("close");
+					success: function (data) {
+						if (data == 'unique') {
+							bf_alert('This element can only be added once into each form');
+							return false;
 						}
+
+						jQuery('.buddyforms_template').remove();
+
+						data = data.replace('accordion-body collapse', 'accordion-body in collapse');
+
+						jQuery('#sortable_buddyforms_elements').append(data);
+						jQuery('.formbuilder-spinner').removeClass('is-active');
+						bf_update_list_item_number();
+						jQuery('#buddyforms_form_elements').removeClass('closed');
+						jQuery("html, body").animate({scrollTop: jQuery('#buddyforms_form_elements ul li:last').offset().top - 200}, 1000);
+						var form_post_type = jQuery('#form_post_type').val();
+						if (form_post_type == 'bf_submissions') {
+							var field_id = jQuery(data).find('#this_field_id').val();
+							bf_taxonomy_input(field_id)
+						}
+						jQuery(document.body).trigger({type: "buddyform:load_fields"});
+						var adminSelect2 = jQuery(".bf-select2");
+						if (adminSelect2.length > 0) {
+							buddyforms_load_select2(adminSelect2);
+						}
+					},
+					error: function () {
+						jQuery('.formbuilder-spinner').removeClass('is-active');
+						jQuery('<div></div>').dialog({
+							modal: true,
+							title: "Info",
+							open: function () {
+								var markup = 'Something went wrong ;-(sorry)';
+								jQuery(this).html(markup);
+							},
+							buttons: {
+								Ok: function () {
+									jQuery(this).dialog("close");
+								}
+							}
+						});
+					},
+					complete: function () {
+						jQuery('#formbuilder-show-templates').hide();
 					}
 				});
 			}
-		});
+		} else {
+			var addNewElementErrorMessage = BuddyFormsBuilderHooks.applyFilters('buddyforms:add_new_form_element_error_message', 'This element is not valid to add to the form.', {addElement: addElement, fieldType: fieldType, search4Element: search4Element, unique: unique});
+			bf_alert(addNewElementErrorMessage);
+			jQuery('.formbuilder-spinner').removeClass('is-active');
+		}
 		return false;
 
 	});
@@ -195,40 +350,16 @@ jQuery(document).ready(function () {
 	// Load the Form From Template
 	//
 	jQuery(document.body).on('click', '.bf_form_template', function () {
-
-		var template = jQuery(this).data("template");
-		load_formbuilder_template(template);
-		return false;
-
-	});
-
-	//
-	// Generate the field slug from the label
-	//
-	jQuery(document.body).on('blur', '.use_as_slug', function () {
-
-		var field_name = jQuery(this).val();
-		if (field_name === '')
-			return;
-
-		var field_id = jQuery(this).attr('data');
-		if (field_id === '')
-			return;
-
-		var field_slug_val = jQuery('tr .slug' + field_id).val();
-
-		if (field_slug_val === '') {
-			jQuery('tr .slug' + field_id).val(slug(field_name, {lower: true}));
-		}
-		jQuery(this).unbind('blur');
-	});
-	//
-	// Reset option for multiple choice fields radio and checkboxes
-	//
-	jQuery(document.body).on('click', '.button.bf_reset_multi_input', function (event) {
-		event.preventDefault();
-		var group_name = jQuery(this).attr('data-group-name');
-		jQuery('input[name="' + group_name + '"]').attr('checked', false);
+		var button = jQuery(this);
+		button.parent().LoadingOverlay('show');
+		jQuery('button.bf_form_template').prop('disabled', true);
+		var template = button.data('template');
+		load_formbuilder_template(template, function() {
+			button.parent().LoadingOverlay('hide');
+			jQuery('button.bf_form_template').prop('disabled', false);
+			jQuery(document.body).trigger({type: "buddyform:load_notifications"});
+		});
 		return false;
 	});
+
 });

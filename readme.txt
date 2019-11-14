@@ -1,9 +1,9 @@
 === Contact - Registration - Post Form Builder & FrontEnd Editor BuddyForms - Making WordPress Forms A Breeze ===
-Contributors: svenl77, konrads, themekraft, buddyforms, shabushabu, christianwach, projectkarol, phuck22
+Contributors: svenl77, konrads, themekraft, buddyforms, shabushabu, christianwach, projectkarol, phuck22, gfirem
 Tags: form builder, contact forms, post forms, user-generated content, user submitted posts, contact form, form, forms, frontend post, frontend publisher, frontend post, submit, submissions, custom form, custom forms, form, form administration, form creation, form creator, form manager, forms, forms builder, forms creation, forms creator, forms manager, community, content, content generation, crowdsourced content, frontend generated content, images, Post, posts, public, publish, Share, submission, submissions, submit, submitted, upload, user submitted, user-generated, user-submit,
 Requires at least: 4.0
-Tested up to: 5.0
-Stable tag: 2.3.1
+Tested up to: 5.2.2
+Stable tag: 2.5.8
 Requires PHP: 5.3
 License: GPLv2
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -387,7 +387,317 @@ If you still get stuck somewhere, our support gets you back on the right track. 
 6. Frontend Form Example of a Simple Post Form
 7. Form Submissions in the admin backend
 
+
 == Changelog ==
+= 2.5.8 - 11 Oct 2019 =
+* Added an implementation to avoid acf field from form validation.
+* Added a new way to edit the list of Countries and States from the elements options.
+* Added a new option into the Country element to load the States for the next State element base on the Country key present in State list. More in the documentation https://docs.buddyforms.com/article/582-country-and-state-elements.
+* Added the default name of does fields which not was adding it when they was added to the form.
+* Fixed the store/load values for elements like the number field in a registration form.
+* Fixed the store/load values for elements from a registration form.
+* Fixed the required signal for the textarea element.
+* Changing the file element from a link to a button.
+* Changing the file element * place to be after the label.
+* Changing the default date format to `dd/mm/yy`.
+* Fixed the jQuery form validation to override the default required jQuery validate by buddyforms internal implementation where external element will not process and letting 3rd addOns to hook into the process.
+* Fixed the form option to stop the Js validation.
+* Fixed error position for the checkbox and the radio buttons.
+* Fixed the red border for the bio element.
+* Fixed the validation for the upload element.
+* Added a * to the first empty element of the country and state element when they are required and the label is inline.
+* Added the placeholder for the upload element with the corresponding *. Now it have the correct label when the form is showing the placeholder or labels.
+* Fixed the error placement for the category, taxonomy and tag element, now the error will appear after the element.
+* Fixed the error placement for the elements textarea, post_excerpt and buddyform_form_content.
+* Fixed the error placement fo the radio buttons.
+* Fixed the red border for password element.
+* Improved the password element label and placeholder. Now the label is showed when the form is configured in the other way the password element will show the placeholder inside the input with the * if the element is required.
+* Fixed the JS validation for the post_formats element.
+* Fixed the placeholder and label for the post_formats element.
+* Fixed the label for the feature image element and added a label inside the element to work as placeholder.
+* Fixed the Category and Tag element missing placeholder.
+* Fixed the captcha form element label and description.
+* Added a new option inside the captcha form element to override the language.
+* Added a hook to customize the Js parameters to include in the request for the captcha form element. `buddyforms_captcha_js_source_parameter`.
+* Improved the honey-pot anti spam.
+
+= 2.5.7 - 4 Oct 2019 =
+* Fixed the issue with the output buffer.
+
+= 2.5.6 - 3 Oct 2019 =
+* Fixed the date element format. Thanks to `Maxime From Hophop Ride`
+* Fixed the hidden element.
+* Fixed the admin submission list to include the Date and the Hidden element correctly.
+* Fixed the Post Excerpt element to be output in the correct place.
+* Fixed the issue with the dropdown element where they let the user add text always.
+* Added support to use the element properties name with Upper letters, this changes improve compatibility with other extensions. Thanks to Joanna Pantages to bring this topic to us.
+
+= 2.5.5 - 30 Sept 2019 =
+* Added a new filter `buddyforms_current_user_can` to change the permission. The filter has 4 parameter permission, form slug, post, type (edit, delete, all).
+* Moved the BuddyForms js global above buddyforms_front_js_css_after_enqueue.
+* Add a new filter buddyforms_loop_form_slug to overwrite the form slug on a post basis in the loop.
+* Reformat the code of the-loop.php
+* Added 2 hooks to let 3rd party addons not include the form action buttons.
+* Added a new do action `buddyforms_the_loop_after_actions` to add actions buttons outside the normal action workflow.
+* Improved the compatibility with the BF UM addon. This change avoid to override the form slug from the query arguments coming from 3rd party addons.
+* Added hooks to change the Country and State list from the code in the professional version.
+* Disabled the select2 to include elements if the option is not activated.
+* Fixed the format for the date element.
+* Fixed the styles to be included in the shortcodes.
+* Fixed the category element to include the default value and the correct items.
+* Fixed the modal to create the pages from the wizard, the setting page and the form builder.
+* Added a new hook buddyforms_after_user_activation to hook after the user activation.
+* Added the time field using the jquery ui datepicker.
+* Changed the library for the date element to use jquery ui datepicker.
+* Improved the way the js data is loaded into the form.
+* Added the ability to process shortcodes from the after form submited message.
+* Fixed the styles of the message.
+* Added some hook into JS to get the field data from 3rd party plugins.
+* Added a class `form-control` to all elements.
+* Changed the required validation to apply only to elements `.form-control:required`.
+* Added a JS action hook for Form submit.
+* Added a new tag option for the shortcode used to get the list of entries. This open the posibility to get entries from multiples forms in one place. Example shortcode `[buddyforms_list_all query_option="list_all_published_posts_by_meta_key" meta_value="acf-validation,test-ultimate-member,test-assets" meta_compare="in" form_slug="acf-validation" meta_key="_bf_form_slug"]`
+
+= 2.5.4 - 19 Aug 2019 =
+* Fixed the validation of the backend message for the manage submission page.
+* Fixed the issue generated by submit an empty tag or category.
+* Fixed the issue to edit/delete post created before without BuddyForms.
+
+= 2.5.3 - 19 Aug 2019 =
+* Fixed the wrong message from the Category field.
+* Updated the generated styles.
+* Fixed the captcha to be showed in all forms.
+* Fixed the styles to be applied correctly to all forms.
+* Fixed the default field option for the taxonomy, category and tag field.
+* Added the dismissible option to the admin notification to setup the page in the plugin settings for Frontend Submissions Management.
+
+= 2.5.2 - 19 Aug 2019 =
+* Improved the way the styles of the forms are loaded and how the are apply to the form. Now this improve let to edit the css of specific form even if exist multiples forms in the same page.
+* Improved the load of the assets.
+* Fixed the password validation to take in count if the field is required or not. Useful for Forms to edit the user profile.
+* Fixed the GDPR output.
+* Fixed the validation of the website and link field to only apply the JS validation when correspond.
+* Added a new general settings for the frontend submissions management.
+* Added the submissions management page to the form select as pre selected if n o attached page exist.
+* Fixed the email validation for the field user_email and email.
+* Added a hook system for frontend JS.
+* Fixed the suffix for the price field.
+* Added required signal for the fields in the builder, to easy identify what fields are required.
+* Fixed the email validation message for the email field.
+* Fixed the issue originated by the form slug coming from the templates.
+* Added 2 function to load the assets using JS.
+* Fixed the field dependent on select2 to load correctly in the builder.
+* Improve the compatibility with the plugin email-subscribers. https://wordpress.org/support/topic/compatibility-with-email-subscribers
+* Fixed the auto-load of the content of the default page to manage submitions.
+* Fixed to get back the post_id used when a form is loaded and the auto-draft is created.
+* Fixed the scroll after the form is submitted.
+* Fixed the creation of the form from the Wizard.
+* Fixed the captcha field.
+* Fixed the email notification for the user not logged in.
+* Fixed the user_email field was changing the email of the current user logged in in all forms.
+* Fixed the output of the tags in the admin submission screen.
+* Fixed the wizard registration tab.
+* Fixed the auto-generate slug for the fields in the form designer.
+* Move the Date field to the basic fields.
+* Adding the field name for all fields when they are added to the builder.
+
+= 2.5.1 - 11 July 2019 =
+* Fixed the double Label for the content field.
+* Updated the way of the form render using echo or simply returning the html.
+* Improved the code to be compatible with JupiterX.
+
+= 2.5.0 - 9 July 2019 =
+* Improved required field messages to be more user friendly.
+* Fixed the function to register users from multisite.
+* Added more argument to extend the fields form 3rd parties.
+* Moved the captcha field to the basic field group.
+* Added a Price field.
+* Removed the label option from the From Action field.
+* Fixed the option to change the form slug, because it was not working if the form not have any submitted entry.
+* Fixed JS incompatibility with external plugins.
+* Code improvement and cleaning.
+* Improved the detection of the bf shortcodes from the post content.
+* Fixed the fields user_login and user_email because the option `hide to logged in` was hiding this field for logged out users and not make sense for a registration form.
+* Added a filter to exclude columns in the submission list from the administration.
+* Updated the user meta mapping to load the user website from user metas.
+* Improved the default submission title for the registration forms.
+* Fixed to show the User meta values when a list of entries shortcode is used.
+* Fixed the user_login and user_email field to load the value from the user meta.
+* Fixed the show captcha when the submission is in the action view.
+* Code fix to the action column of the list of entries of a contact form.
+* Added a custom class to the list of submissions.
+* Fixed the password reset shortcode.
+* Improved the code related to the error handling.
+* Added the possibility to override the template/output used to change the password.
+* Removing the session from the form submission and the error handling.
+* Adding the Content element to handle the server validation for that component.
+* Added a filter to change the output used to replace by a shortcode. `apply_filters('buddyforms_field_shortcode_value', $field_result_value, $form_slug, $post_id, $target_slug )`
+* Fixed to avoid jQuery validate crash.
+* Fixed the undefined index when the dropdown don't have any item created yet.
+* Added the option to create a form from scratch or select the existing templates when a form is added trough the option add new.
+* Fixed the wizard to not show the new builder background.
+* Fixed the issue related to the creation of auto-draft in each visit of the form in the frontend.
+* Added a filter to change the array separator. `apply_filters('buddyforms_implode_separator', ', ', $field_type, $field_slug)`
+* Fixed the validation to process the array correctly, it affect the taxonomy fields.
+* Added the taxonomy field value for the submission column in the administration.
+* Fixed the permission issue when the post is created using buddyforms.
+* Added a helper function to check the user capability. `bf_user_can`
+* Added a nonce error message.
+* Added a cursos pointer to the checkbox input.
+* Fixed the permission to submit a form for anonymous users.
+* Fixed a notice in the email notifications.
+* Fixed the edit and delete buttons.
+* Fixed the required validation for the content field.
+* Fixed the auto-draft error for different post types.
+* Added a Js hook to extend the function to get field data.
+* Change "Check to enabled" to "Check to enable".
+* Updating Freemius to version 2.3.0.
+* Added the ability to join the beta tester groups.
+* Fixed the way is added the scripts when the form is load from a shortcode.
+* Fixed the user email element to be an email input to validate with html5.
+
+= 2.4.6 - 3 Jun 2019 =
+* Fix : Feature Image Field layout.
+* Fix: Validation min/max value for number field type.
+* Fixed the trash option inside the post status field.
+* Added a filter (`buddyforms_before_update_post_meta`). to hook before the form meta is saved in order to customize it.
+* Added an option inside the form to enabled or disabled the js validation in the frontend.
+* Removing the jQuery validation from php code.
+* Added the required validtion inside JS file.
+* Removed the validation tab and required option for the comment field.
+* Added an event to the required validation to be extended from 3rd extensions for custom fields using JS.
+* Fix the required validation to pass the field with no data like password second field.
+* Added a global event to enabled or disabled the form submit button, this give the possibility to improve the integration of 3rd party code.
+* Fixed the repeated Date field. Fixes #498
+* Added the current form into the JS global var to be used in the backend to load or apply the field related code.
+* Change the Date field to jQuery DateTimePicker and added more options to get more control of this field.
+* The new Date field is enabled to use with Time or Date or both at same time and handle custom formats and time steps. Also is possible to customize from external JS using event callback.
+* Improving the validation for the hidden fields like the taxonomies, dates.
+* Fixing the placement of the validation error.
+* Fixing the error validation to work with taxonomy fields.
+* Removing the limit to have more than one Date field in a form.
+* Added the label to the Date field this field is inline.
+* Added a function to get the field by ID.
+* Added a code to get the form slug from the post meta to define to include the assets.
+* Improved the label position for the error validation.
+* Fixed the column row to styles. Added a new class for the first element row `bf-start-row`.
+* Added an option inside the fields Excerpt, Content and Textarea to control the amount of rows.
+* Added the ability to copy the shortcodes from the side bar using a single click inside the form builder.
+* Fixed the option to generate the title and content for a post to not take precedence over the submitted value if the field is not hidden.
+* Added one option inside the form to change the Form slug.
+* Added server side validation for Date fields.
+* Fixed the styles for the Date field when is show in the edit post screen inside a metabox.
+* Improved the form slug option to be process only if it change.
+* Improved the Element Class and Validation Class to accept the field options as a property to handle the field options inside the Field Class.
+* Moved the Date field options inside the Date field Class.
+* Added the server side validation for the PostFormat field.
+* Added PostFormat as a new Field type in the code.
+* Improve the server side validation to extend existing using filters.
+* Fixing the shortcodes to only show the requested form by the provided form slug.
+* Fixing a hook to override the submit button.
+
+= 2.4.5 - 19 May 2019 =
+* Adding a copy to clipboard into the form designer to copy the field slug.
+* Fixing the extra weigh of the plugin zip.
+
+= 2.4.4 - 19 May 2019 =
+* Fixed the editor issue in order to only apply the fix related to the form designer in certain pages.
+* Fixed email notification duplicate values for taxonomies in the table of all fields.
+* Improved the notification code to be more fast and stable. Now the empty shortcodes will be replace by empty string to not send noice shortcode tags into the email to the final users.
+
+= 2.4.3 - 17 May 2019 =
+* Fixed fields with ajax validations allows to enter a lower number in Max Length than the entered in Min Length.
+* Fixed the empty editor with gutenberg.
+* Fixed the issue reported in https://wordpress.org/support/topic/buddy-forms-not-working-with-5-1-1/.
+* Fix to avoid hide all metaboxes when BF is adding his own metabox.
+
+= 2.4.2 - 16 May 2019 =
+* Fixed the assets issue caused by the automation script used to generate and deployed the new version.
+
+= 2.4.1 – 14 May 2019
+* Added the option to define the number of rows for a textarea.
+* Fixed the option `Make this field Hidden` because it was not appearing in the form designer.
+* Fixed: To load the assets on the admin pages and show the upload field on the admin pages.
+* Added the ability to sort the item inside the next field types: checkbox, dropdown, radiobutton and gpdr
+* Fixed the Ajax Validation, broken for the text aria.
+* Fixed the issue related to the post status. Now the post will keep the post status when is created or edited if not exist a status field.
+* Fixed the css for "Required field" messages in the dropdowns, checkboxes, radiobuttons and GDPRs are misplaced.
+* Fixed the email notification to process the field shortcode user_email.
+* Fixed the notification issue. The bug was throw when a field shortcode was used in the notification options and was not process correctly. Now even is possible to use field shortcodes inline with strings.
+* Fixed the validation for min and max length.
+* Fixed the validation for min and max number.
+
+= 2.4.0 – 29 March 2019
+* Change to use SEM Version
+* Fixed default value for upload and feature image field
+* Added a way to not echo the textarea, only return the html
+* Fixed the double update of the existing post
+* Improved the taxonomy, category and tag field to be possible to extend the terms query by 3rd parties using the filter `buddyforms_ajax_load_term_query`
+* Ready to be localized the string `Upload in progress`
+* Added a hook to add field related translations inside the field
+* Added a container to divide the form actions
+* Fixed the error related to the save of fields placed after a taxonomy field
+* Added a validation to avoid error when no exist any form
+* Fixed the visibility of the new ajax option inside the taxonomy field
+* Fixed the button to reset the form styles
+* Added compatibility for `Better Notifications for WordPress`
+* Changed the ajax search name_like to use search option
+* Updated select2 to the latest version
+* Added cache to the select2 search terms field
+* Add draft functionality
+* Add a mechanism to read the form options from the js side
+* Improved the code stability
+* Added a helper function to grab the form slug from different sources
+* Added a btn-alt for the draft button to make a difference with the primary button
+* Added custom class for draft button
+* Added a custom element to handle the form actions (publish/draft) buttons. With this custom field is possible to output the selected button in a different order
+* Updated the draft text
+* DOMDocument error fixed. Now the code detect if dom library is loaded if not it use regex
+* Moved the custom class option under the switch to make sure the option is available for all fields
+* Added the draft options
+* Move the form action field into the basic group
+* Fixed the issue related to load assets in the admin where they don't needed
+* Improved the detection of the block to include the assets trough gutenberg
+* Fixed the navigation in the list of entries for contact form
+* Fixed the form builder grid option not working for images
+* Update the session to use transient to avoid trash in the database
+* Remove the long time expiration for the session, now is 27~30mn
+* Fixed the mail notification when the post status change.
+* Improved the shortcode `form_elements_table` used into the mail notifications
+* Added the git templates for issues and features request into the git repository
+* Added a filter to override the lost password link
+* Fix the notification accordion
+* Fix the ad notification button
+* Fixed the after submission option when is displaying a page content
+* Fixed the regex to detect bf from the post content
+* Fix the shortcode to generate the table with all values from the form. This shortcode is used in the form notification. The fix include the notification when the post change his status.
+* Fixed the notification accordion when the form is created directly
+
+= 2.3.3.2 – 6 March 2019
+* Added a check to avoid start gutenberg block in older wordpress versions
+* Added an option to use ajax for the taxonomy field
+* Code improved
+
+= 2.3.3.1 – 2 March 2019
+* IMPORTANT: the function buddyforms_locate_template used in our templates has changed now need the $form_slug parameter. Please update your templates files.
+* Fixed the checkbox styles in the form permissions
+* Freemus SDK Update
+
+= 2.3.3 – 28 Feb 2019
+* Update the way to include parameters into js
+* Added buddyformsGlobal var
+* Code Refactored
+* Improved the upload field to work in the list of contact entries
+* Fixed the double label for the upload field
+* Fixed the way is added the rules to jQuery validation, now the input need to be active.
+* Fixed: Overlapping title on a new BuddyForm
+* fixed the admin url used in ajax call
+* Update Freemius
+* Update composer type
+
+= 2.3.2 – 26 Feb 2019
+* Fixed the assets to be included with the shortcodes.
+
 = 2.3.1 – 22 Feb 2019
 * Added Gutenberg Support
 * Add new Blocks for Embed Forms, Submissions, Registration and Login Forms.

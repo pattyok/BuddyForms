@@ -18,7 +18,7 @@ abstract class Base {
 			$available          = array_keys( get_class_vars( $class ) );
 			$property_reference = array();
 			foreach ( $available as $property ) {
-				$property_reference[ strtolower( $property ) ] = $property;
+				$property_reference[ trim( $property ) ] = $property;
 			}
 
 			/*The method reference lookup array is created so that "set" methods can be called
@@ -26,11 +26,11 @@ abstract class Base {
 			$available        = get_class_methods( $class );
 			$method_reference = array();
 			foreach ( $available as $method ) {
-				$method_reference[ strtolower( $method ) ] = $method;
+				$method_reference[ trim( $method ) ] = $method;
 			}
 
 			foreach ( $properties as $property => $value ) {
-				$property = strtolower( $property );
+				$property = trim( $property );
 				/*Properties beginning with "_" cannot be set directly.*/
 				if ( $property[0] != "_" ) {
 					/*If the appropriate class has a "set" method for the property provided, then
@@ -65,6 +65,16 @@ abstract class Base {
 			$this->_attributes[ $attribute ] = $value;
 		}
 	}
+
+	/**
+	 * @param $attribute
+	 */
+	public function unsetAttribute( $attribute ) {
+		if ( isset ( $this->_attributes ) ) {
+			unset( $this->_attributes[ $attribute ] );
+		}
+	}
+
 
 	/*This method prevents double/single quotes in html attributes from breaking the markup.*/
 
@@ -109,7 +119,7 @@ abstract class Base {
 
 		return $str;
 	}
-	
+
 	/**
 	 * Filter special characters
 	 *
@@ -124,7 +134,7 @@ abstract class Base {
 			return htmlspecialchars( $str );
 		}
 	}
-	
+
 	/**
 	 * Convert special characters to HTML entities
 	 *
@@ -160,14 +170,23 @@ abstract class Base {
 	}
 
 	/**
+	 * Get the Required Signal in plain string by default ` * `
+	 *
+	 * @return string
+	 */
+	public function getRequiredPlainSignal() {
+		return apply_filters( 'buddyforms_render_plain_required_signal', ' * ' );
+	}
+
+	/**
 	 * Output or return the required flag
 	 *
 	 * @param bool $echo
 	 *
-	 * @return string
+	 * @return string|void
 	 */
 	public function renderRequired( $echo = false ) {
-		$html   = sprintf( '&nbsp;<span class="required">%s</span>&nbsp;', $this->getRequiredSignal() );
+		$html = sprintf( '&nbsp;<span class="required">%s</span>&nbsp;', $this->getRequiredSignal() );
 		if ( $echo ) {
 			echo $html;
 		} else {

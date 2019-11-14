@@ -9,7 +9,7 @@ function buddyforms_form_builder_register_templates() {
 	$response = wp_remote_get( 'http://demo.buddyforms.com/wp-json/buddyforms/v1/all/' );
 
 	if ( is_wp_error( $response ) || $response['response']['code'] != 200 ) {
-		$response         = Array();
+		$response         = array();
 		$response['body'] = buddyforms_default_form_templates_json();
 	}
 
@@ -43,7 +43,7 @@ function buddyforms_form_builder_register_templates() {
 		}
 	}
 
-	$templates                 = Array();
+	$templates                 = array();
 	$templates['contact']      = $buddyforms_templates['contact'];
 	$templates['registration'] = $buddyforms_templates['registration'];
 	$templates['post']         = $buddyforms_templates['post'];
@@ -56,16 +56,16 @@ function buddyforms_form_builder_template_get_dependencies( $template ) {
 
 	$buddyform = json_decode( $template['json'] );
 
-	$dependencies = 'None';
+	$dependencies = __('None', 'buddyforms');
 	$deps         = '';
 
 	if ( ! ( $buddyform->post_type == 'post' || $buddyform->post_type == 'page' || $buddyform->post_type == 'bf_submissions' ) ) {
-		$deps .= 'BuddyForms Professional';
+		$deps .= __('BuddyForms Professional', 'buddyforms');
 	}
 
 	if ( isset( $buddyform->form_fields ) ) : foreach ( $buddyform->form_fields as $field_key => $field ) {
-		if ( $field->slug == 'taxonomy' || $field->slug == 'category' || $field->slug == 'tags' ) {
-			$deps .= 'BuddyForms Professional';
+		if ( $field->slug == 'taxonomy' ) {
+			$deps .= __('BuddyForms Professional', 'buddyforms');
 		}
 	}
 	endif;
@@ -114,22 +114,39 @@ function buddyforms_form_builder_template_get_dependencies( $template ) {
 
 }
 
-//
-// Template HTML Loop the array of all available form builder templates
-//
-function buddyforms_form_builder_templates() {
+/**
+ * Template HTML Loop the array of all available form builder templates
+ *
+ * @since 2.5.0
+ *
+ * @param bool $is_wizard
+ *
+ * @return false|string
+ */
+function buddyforms_form_builder_templates($is_wizard = false) {
 
 	$buddyforms_templates = buddyforms_form_builder_register_templates();
 
 	ob_start();
 
 	?>
-    <div class="buddyforms_template buddyforms_wizard_types">
-        <h5>Choose a pre-configured form template or start a new one:</h5>
+    <div class="buddyforms_template buddyforms_template_container buddyforms_wizard_types">
+	    <?php if ( ! $is_wizard ): ?>
+            <div id="buddyforms_template_header_container">
+                <div id="buddyforms_template_header_container_h3">
+                    <h3><a href="javascript:void(0);" class="formbuilder-show-templates">Choose a pre-configured Form</a> or start adding Field </h3>
+                </div>
+                <div id="buddyforms_template_arrow_container">
+                    <img class="buddyforms_template_arrow" src="<?php echo BUDDYFORMS_ASSETS . 'images/arrow.png' ?>">
+                </div>
+            </div>
+	    <?php endif; ?>
 
 		<?php add_thickbox(); ?>
 
-		<?php foreach ( $buddyforms_templates as $sort_key => $sort_item ) { ?>
+        <div <?php echo ( ! $is_wizard ) ? 'id="buddyforms_template_list_container"' : '' ?>>
+            <h5><?php _e('Choose a pre-configured form template or start a new fields from the bottom.', 'buddyforms') ?></h5>
+		    <?php foreach ( $buddyforms_templates as $sort_key => $sort_item ) { ?>
 
             <h2><?php echo strtoupper( $sort_key ) ?> FORMS</h2>
 
@@ -157,7 +174,7 @@ function buddyforms_form_builder_templates() {
                         </p>
                     </div>
 					<?php if ( $dependencies != 'None' ) { ?>
-                        <p class="bf-tile-dependencies">Dependencies: <?php echo $dependencies ?></p>
+                        <p class="bf-tile-dependencies"><?php _e('Dependencies: ', 'buddyforms') ?><?php echo $dependencies ?></p>
 					<?php } else { ?>
                         <button <?php echo $disabled ?> id="btn-compile-<?php echo $key ?>"
                                                         data-type="<?php echo $sort_key ?>"
@@ -187,7 +204,7 @@ function buddyforms_form_builder_templates() {
                 </div>
 			<?php }
 		} ?>
-
+        </div>
     </div>
 
 	<?php
@@ -208,15 +225,11 @@ function buddyforms_form_template() {
 		$post = new stdClass();
 	}
 
-	if ( ! empty( $_POST['title'] ) ) {
-		$post->post_name = sanitize_title( $_POST['title'] );
-	}
-
 	$post->post_type = 'buddyforms';
 
 	$buddyforms_templates = buddyforms_form_builder_register_templates();
 
-	$forms = Array();
+	$forms = array();
 	foreach ( $buddyforms_templates as $type => $form_temps ) {
 		foreach ( $form_temps as $forms_slug => $form ) {
 			$forms[ $forms_slug ] = $form;
@@ -229,6 +242,11 @@ function buddyforms_form_template() {
 
 	$buddyform = json_decode( $buddyform['json'], true );
 
+	if ( ! empty( $_POST['title'] ) ) {
+		$post->post_name = sanitize_title( $_POST['title'] );
+		$buddyform['slug'] = $post->post_name;
+	}
+
 	ob_start();
 	buddyforms_metabox_form_elements( $post, $buddyform );
 	$formbuilder = ob_get_clean();
@@ -239,14 +257,12 @@ function buddyforms_form_template() {
 	ob_start();
 
 	?>
-    <div class="buddyforms_accordion_notification">
-        <div class="hidden bf-hidden"><?php wp_editor( 'dummy', 'dummy' ); ?></div>
+    <div class="hidden bf-hidden"><?php wp_editor( 'dummy', 'dummy' ); ?></div>
 
-		<?php buddyforms_mail_notification_screen() ?>
+	<?php buddyforms_mail_notification_screen() ?>
 
-        <div class="bf_show_if_f_type_post bf_hide_if_post_type_none">
-			<?php buddyforms_post_status_mail_notification_screen() ?>
-        </div>
+    <div class="bf_show_if_f_type_post bf_hide_if_post_type_none">
+		<?php buddyforms_post_status_mail_notification_screen() ?>
     </div>
 	<?php
 	$mail_notification = ob_get_clean();

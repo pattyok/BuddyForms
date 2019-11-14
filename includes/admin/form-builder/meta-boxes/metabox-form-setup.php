@@ -37,15 +37,26 @@ function buddyforms_metabox_form_setup() {
 	$status            = isset( $buddyform['status'] ) ? $buddyform['status'] : 'false';
 	$comment_status    = isset( $buddyform['comment_status'] ) ? $buddyform['comment_status'] : 'false';
 	$revision          = isset( $buddyform['revision'] ) ? $buddyform['revision'] : 'false';
+	$draft_action      = isset( $buddyform['draft_action'] ) ? $buddyform['draft_action'] : 'false';
 	$admin_bar         = isset( $buddyform['admin_bar'] ) ? $buddyform['admin_bar'] : 'false';
 	$edit_link         = isset( $buddyform['edit_link'] ) ? $buddyform['edit_link'] : 'all';
 	$bf_ajax           = isset( $buddyform['bf_ajax'] ) ? $buddyform['bf_ajax'] : false;
-	$user_data         = isset( $buddyform['user_data'] ) ? $buddyform['user_data'] : array( 'ipaddress', 'referer', 'browser', 'version', 'platform', 'reports', 'userAgent', 'enable_all' );
+	$user_data         = isset( $buddyform['user_data'] ) ? $buddyform['user_data'] : array(
+		'ipaddress',
+		'referer',
+		'browser',
+		'version',
+		'platform',
+		'reports',
+		'userAgent',
+		'enable_all'
+	);
 	$list_posts_option = isset( $buddyform['list_posts_option'] ) ? $buddyform['list_posts_option'] : 'list_all_form';
 	$list_posts_style  = isset( $buddyform['list_posts_style'] ) ? $buddyform['list_posts_style'] : 'list';
 
 	$local_storage = isset( $buddyform['local_storage'] ) ? $buddyform['local_storage'] : '';
 
+	$js_validation = isset( $buddyform['js_validation'] ) ? $buddyform['js_validation'] : '';
 
 	// Create The Form Array
 	$form_setup = array();
@@ -53,6 +64,17 @@ function buddyforms_metabox_form_setup() {
 	//
 	// Submission
 	//
+    $element = new Element_Textbox( '<b>' . __( "From Slug", 'buddyforms' ), "buddyforms_options[slug]", array(
+		'value'     => $slug,
+		'shortDesc' => __( 'The Form Slug is used in shortcodes and other places, please take care changing this option.', 'buddyforms' ),
+	) );
+
+    if ( buddyforms_core_fs()->is_not_paying() && ! buddyforms_core_fs()->is_trial() ) {
+		$element->setAttribute( 'disabled', 'disabled' );
+	}
+
+	$form_setup['Form Submission'][] = $element;
+
 	$element = new Element_Select( '<b>' . __( "After Submission", 'buddyforms' ) . '</b>', "buddyforms_options[after_submit]", array(
 		'display_message'    => __( 'Display Message', 'buddyforms' ),
 		'display_form'       => __( 'Display the Form and Message' ),
@@ -123,6 +145,15 @@ function buddyforms_metabox_form_setup() {
 	$element = new Element_Checkbox( '<b>' . __( 'Local Storage', 'buddyforms' ) . '</b>', "buddyforms_options[local_storage]", array( 'disable' => __( 'Disable Local Storage', 'buddyforms' ) ), array(
 		'shortDesc' => __( 'The form elements content is stored in the browser so it not gets lost if the tab gets closed by accident', 'buddyforms' ),
 		'value'     => $local_storage
+	) );
+	if ( buddyforms_core_fs()->is_not_paying() && ! buddyforms_core_fs()->is_trial() ) {
+		$element->setAttribute( 'disabled', 'disabled' );
+	}
+	$form_setup['Form Submission'][] = $element;
+
+	$element = new Element_Checkbox( '<b>' . __( 'Javascript Validations', 'buddyforms' ) . '</b>', "buddyforms_options[js_validation]", array( 'disabled' => __( 'Disable JavaScript Validation', 'buddyforms' ) ), array(
+		'shortDesc' => __( 'By default the Javascript validations are enabled. Check to disable it.', 'buddyforms' ),
+		'value'     => $js_validation
 	) );
 	if ( buddyforms_core_fs()->is_not_paying() && ! buddyforms_core_fs()->is_trial() ) {
 		$element->setAttribute( 'disabled', 'disabled' );
@@ -214,10 +245,28 @@ function buddyforms_metabox_form_setup() {
 	}
 	$form_setup['Create Content'][] = $element;
 
+	$element = new Element_Checkbox( '<b>' . __( 'Enable Draft', 'buddyforms' ) . '</b>', "buddyforms_options[draft_action]", array( 'Enable Draft' => __( 'Enable Draft Form Action', 'buddyforms' ) ),
+		array(
+			'value' => $draft_action,
+			'class' => 'bf_hide_if_post_type_none'
+		) );
+	if ( buddyforms_core_fs()->is_not_paying() && ! buddyforms_core_fs()->is_trial() ) {
+		$element->setAttribute( 'disabled', 'disabled' );
+	}
+	$form_setup['Create Content'][] = $element;
+
 
 	//
 	// Edit Submissions
 	//
+
+    // Make sure to use the default submissions management page if non exist!
+    if( ! $attached_page || $attached_page == 'none' ||  $attached_page == 'false'){
+	    	    $buddyforms_submissions_page = get_option( 'buddyforms_submissions_page' );
+	    if($buddyforms_submissions_page){
+		    $attached_page = $buddyforms_submissions_page;
+        }
+    }
 
 	$siteurl           = get_bloginfo( 'wpurl' );
 	$attached_page_url = get_permalink( $attached_page );
@@ -247,7 +296,7 @@ function buddyforms_metabox_form_setup() {
 
 	$form_setup['Edit Submissions'][] = new Element_Select( '<b>' . __( "Enable site members to manage their submissions", 'buddyforms' ) . '</b>', "buddyforms_options[attached_page]", $all_pages, array(
 		'value'     => $attached_page,
-		'shortDesc' => sprintf( '<b><a href="#" id="bf_create_page_modal">%s </a></b> %s', __( 'Create a new Page', 'buddyforms' ), __( 'The page is used to create the endpoints for the create - list and edit submissions views. ', 'buddyforms' ) ),
+		'shortDesc' => sprintf( '<b><a href="javascript:void(0);" onclick="createNewPageOpenModal()" id="bf_create_page_modal">%s </a></b> %s', __( 'Create a new Page', 'buddyforms' ), __( 'The page is used to create the endpoints for the create - list and edit submissions views. ', 'buddyforms' ) ),
 		'id'        => 'attached_page',
 		'data-slug' => $slug
 	) );

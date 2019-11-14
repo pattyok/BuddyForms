@@ -15,7 +15,7 @@
  */
 class BfAdminNotices {
 	public function __construct() {
-		add_action('post_submitbox_start', array($this, 'buddyforms_notice'));
+		add_action( 'post_submitbox_start', array( $this, 'buddyforms_notice' ) );
 	}
 
 	public function buddyforms_notice() {
@@ -40,29 +40,32 @@ class BfAdminNotices {
 			return;
 		}
 
-		switch ($buddyform['form_type']){
+		switch ( $buddyform['form_type'] ) {
 			case 'post':
-				$this->validate_post_form($buddyform);
+				$this->validate_post_form( $buddyform );
 				break;
 			case 'registration':
-				$this->validate_registration_form($buddyform);
+				$this->validate_registration_form( $buddyform );
 				break;
 		}
 	}
 
 	public function validate_registration_form( $buddyform ) {
-		$messages = array();
-
-		$users_can_register = get_site_option( 'users_can_register' );
-
-		if ( empty( $users_can_register ) ) {
-			$messages[] = __( 'Registration is disabled on your site. Please enable registration if you like to use this form for registration purpose. You can still use it to update existing Users. <a href="/wp-admin/options-general.php">Set</a> registration to Anyone can register.', 'buddyforms' );
+		$users_can_register = false;
+		if ( is_multisite() ) {
+			$users_can_register = users_can_register_signup_filter();
+		} else {
+			$users_can_register = get_site_option( 'users_can_register' );
 		}
 
-		$this->show_form_notices( $messages );
+		if ( empty( $users_can_register ) ) {
+			$messages   = array();
+			$messages[] = __( 'Registration is disabled on your site. Please enable registration if you like to use this form for registration purpose. You can still use it to update existing Users. <a href="/wp-admin/options-general.php">Set</a> registration to Anyone can register.', 'buddyforms' );
+			$this->show_form_notices( $messages );
+		}
 	}
 
-	public function validate_post_form($buddyform) {
+	public function validate_post_form( $buddyform ) {
 		//
 		// OK let us start with the form validation
 		//
@@ -89,11 +92,7 @@ class BfAdminNotices {
 
 		if ( isset( $buddyform['form_fields'] ) ) {
 			foreach ( $buddyform['form_fields'] as $field_key => $field ) {
-				if ( $field['type'] == 'taxonomy'
-				     || $field['type'] == 'category'
-				     || $field['type'] == 'tags'
-				     || $field['type'] == 'featured_image'
-				) {
+				if ( $field['type'] == 'taxonomy' ) {
 					$messages['pro'] = __( 'BuddyForms Professional is required to use this Form. You need to upgrade to the Professional Plan. The Free and Starter Versions does not support the required Form Elements <a href="edit.php?post_type=buddyforms&page=buddyforms-pricing">Go Pro Now</a>', 'buddyforms' );
 				}
 			}
@@ -107,12 +106,28 @@ class BfAdminNotices {
 
 		$messages = apply_filters( 'buddyforms_broken_form_error_messages', $messages );
 
-		$this->show_form_notices($messages);
+		$this->show_form_notices( $messages );
 	}
 
 	public function show_form_notices( $messages ) {
 		if ( ! empty( $messages ) ) {
 			include 'view/admin-notices.php';
 		}
+	}
+}
+
+add_action( 'admin_notices', 'buddyforms_settings_missing_admin_notice' );
+
+function buddyforms_settings_missing_admin_notice() {
+	$buddyforms_close_submissions_page = get_option( 'close_submission_default_page_notification' );
+	$buddyforms_submissions_page       = get_option( 'buddyforms_submissions_page' );
+	// Check if the submissions management page is selected in the general settings or the notification was dismissed
+	if ( (( empty( $buddyforms_submissions_page ) || $buddyforms_submissions_page == 'none') ) && empty( $buddyforms_close_submissions_page ) ) {
+		?>
+        <div id="buddyforms_submission_default_page" class="notice notice-error is-dismissible">
+            <p><?php _e( 'BuddyForms Submissions Page Missing!', 'buddyforms' ); ?></p>
+            <p><?php _e( 'Please select a default page for your submissions in the BuddyForms general settings ', 'buddyforms' ); ?><a href="<?php menu_page_url( 'buddyforms_settings' ); ?>"><?php _e( 'Select the Page Now!', 'buddyforms' ); ?></a></p>
+        </div>
+		<?php
 	}
 }

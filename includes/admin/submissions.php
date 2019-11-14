@@ -115,11 +115,11 @@ class BuddyFormsSubmissionPage {
 	 * Determine if the user have the capability to get the submission for this form.
 	 * Note: This return true for user with admin role, checking the `activate_plugins` capability
 	 *
-	 * @since 2.3.1
-	 *
 	 * @param $form_slug
 	 *
 	 * @return bool
+	 * @since 2.3.1
+	 *
 	 */
 	function has_the_capability( $form_slug ) {
 		if ( empty( $form_slug ) ) {
@@ -194,6 +194,10 @@ if ( ! class_exists( 'WP_List_Table' ) ) {
  * Class BuddyForms_Submissions_List_Table
  */
 class BuddyForms_Submissions_List_Table extends WP_List_Table {
+	/**
+	 * @var void
+	 */
+	public $exclude_columns;
 
 	/**
 	 * BuddyForms_Submissions_List_Table constructor.
@@ -207,6 +211,7 @@ class BuddyForms_Submissions_List_Table extends WP_List_Table {
 			'ajax'     => false            //does this table support ajax?
 		) );
 
+		$this->exclude_columns = buddyforms_get_exclude_field_slugs();
 	}
 
 	/**
@@ -242,9 +247,9 @@ class BuddyForms_Submissions_List_Table extends WP_List_Table {
 		$bf_value = get_post_meta( intval( $item->ID ), $column_name, true );
 		$bf_field = buddyforms_get_form_field_by_slug( $_GET['form_slug'], $column_name );
 		if ( $bf_field !== false ) {
-			$this->get_column_values( $column_name, $bf_field['type'], $item, $bf_value );
+			$this->get_column_values( $column_name, $bf_field['type'], $item, $bf_value, $bf_field );
 		}
-		if ( $column_name == 'Date' ) {
+		if ( $column_name == 'Creation_Date' ) {
 			echo get_the_date( 'F j, Y', $item->ID );
 		}
 		if ( $column_name == 'Author' ) {
@@ -257,83 +262,11 @@ class BuddyForms_Submissions_List_Table extends WP_List_Table {
 		}
 	}
 
-	public function get_column_values( $field_slug, $field_type, $item, $bf_value ) {
-		switch ( $field_type ) {
-			case 'title':
-				$bf_value = get_the_title( $item->ID );
-				break;
-			case 'content':
-				$post = get_post( $item->ID );
+	public function get_column_values( $field_slug, $field_type, $item, $bf_value, $bf_field ) {
+		$post = get_post( $item->ID );
 
-				$content = str_replace( ']]>', ']]&gt;', $post->post_content );
-				$content = strip_shortcodes( $content );
+		$bf_value = buddyforms_get_field_output( $item->ID, $bf_field, $post, $bf_value, $field_slug );
 
-				/**
-				 * Filters the number of words in an excerpt.
-				 *
-				 * @since 2.7.0
-				 *
-				 * @param int $number The number of words. Default 55.
-				 */
-				$excerpt_length = apply_filters( 'excerpt_length', 55 );
-				/**
-				 * Filters the string in the "more" link displayed after a trimmed excerpt.
-				 *
-				 * @since 2.9.0
-				 *
-				 * @param string $more_string The string shown within the more link.
-				 */
-				$excerpt_more = apply_filters( 'excerpt_more', ' ' . '[&hellip;]' );
-				$bf_value     = wp_trim_words( $content, $excerpt_length, $excerpt_more );
-				break;
-			case 'upload':
-				$result        = '';
-				$attachment_id = explode( ",", $bf_value );
-				foreach ( $attachment_id as $id ) {
-					if ( ! empty( $id ) ) {
-						$url    = wp_get_attachment_url( $id );
-						$result .= " <a style='vertical-align: top;' target='_blank' href='" . $url . "'>$id</a>,";
-					}
-				}
-				$bf_value = ( ! empty( $result ) ) ? rtrim( trim( $result ), ',' ) : '';
-				break;
-			case 'Date':
-				$bf_value = get_the_date( 'F j, Y', $item->ID );
-				break;
-			case 'category':
-			case 'tags':
-				if ( is_array( $bf_value ) ) {
-					$result = array();
-					foreach ( $bf_value as $key => $val ) {
-						$result[] = ( $field_type == 'tags' ) ? get_tag( $val )->name : get_the_category_by_ID( $val );
-					}
-					$bf_value = implode( ',', $result );
-				}
-				break;
-			case 'status':
-				$bf_value = buddyforms_get_post_status_readable( get_post_status( $item->ID ) );
-				break;
-			case 'user_login':
-				$author_id = ( ! empty( $item->post_author ) ) ? $item->post_author : 0;
-				if ( ! empty( $author_id ) ) {
-					$author = get_user_by( 'ID', $author_id );
-					if ( $author instanceof WP_User ) {
-						$bf_value = $author->user_login;
-					}
-				}
-				break;
-			default:
-				if ( is_array( $bf_value ) ) {
-					$str_result = '';
-					foreach ( $bf_value as $key => $val ) {
-						$str_result .= $val;
-					}
-					$bf_value = $str_result;
-				} else {
-					$bf_value = wp_trim_words( $bf_value, 25 );
-				}
-				break;
-		}
 		echo apply_filters( "bf_submission_column_default", $bf_value, $item, $field_type, $field_slug );
 	}
 
@@ -381,15 +314,15 @@ class BuddyForms_Submissions_List_Table extends WP_List_Table {
 		global $buddyforms;
 
 		$columns = array(
-			'ID'     => 'ID',
-			'Author' => __( 'Author', 'buddyforms' ),
-			'Date'   => __( 'Date', 'buddyforms' ),
+			'ID'            => 'ID',
+			'Author'        => __( 'Author', 'buddyforms' ),
+			'Creation_Date' => __( 'Creation Date', 'buddyforms' ),
 		);
 
 		if ( isset( $_GET['form_slug'] ) && isset( $buddyforms[ $_GET['form_slug'] ]['form_fields'] ) ) {
 			foreach ( $buddyforms[ $_GET['form_slug'] ]['form_fields'] as $key => $field ) {
-				if ( ! empty( $field['slug'] ) && ! empty( $field['name'] ) && $field['slug'] != 'user_pass' ) {
-					$columns[ $field['slug'] ] = $field['name'];
+				if ( ! empty( $field['slug'] ) && ! in_array( $field['slug'], $this->exclude_columns ) ) {
+					$columns[ $field['slug'] ] = ! empty( $field['name'] ) ? $field['name'] : $field['slug'];
 				}
 			}
 

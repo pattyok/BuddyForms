@@ -39,13 +39,19 @@ abstract class Element extends Base {
 	protected $validation = array();
 
 	/**
+	 * @var array
+	 */
+	protected $field_options = array();
+
+	/**
 	 * Element constructor.
 	 *
 	 * @param $label
 	 * @param $name
 	 * @param array|null $properties
+	 * @param array|null $field_options
 	 */
-	public function __construct( $label, $name, array $properties = null ) {
+	public function __construct( $label, $name, array $properties = null, array $field_options = null ) {
 		$configuration = array(
 			"label" => $label,
 			"name"  => $name
@@ -56,6 +62,12 @@ abstract class Element extends Base {
 		if ( is_array( $properties ) ) {
 			$configuration = array_merge( $configuration, $properties );
 		}
+
+		if ( ! empty( $field_options ) ) {
+			$this->field_options = $field_options;
+		}
+
+		$this->setRequired( ! empty( $configuration['required'] ) );
 
 		$this->configure( $configuration );
 	}
@@ -84,6 +96,20 @@ abstract class Element extends Base {
 	/*If an element requires external javascript file, this method is used to return an
 	array of entries that will be applied after the form is rendered.*/
 	public function getJSFiles() {
+	}
+
+	/**
+	 * @return mixed
+	 */
+	public function getName() {
+		return $this->_attributes['name'];
+	}
+
+	/**
+	 * @param mixed $name
+	 */
+	public function setName( $name ) {
+		$this->_attributes['name'] = $name;
 	}
 
 	/**
@@ -147,8 +173,11 @@ abstract class Element extends Base {
 
 	/**
 	 * @param $value
+	 * @param $field
 	 *
 	 * @return bool
+	 * @since 2.4.6 added the $element parameter
+	 *
 	 */
 	public function isValid( $value ) {
 		$valid = true;
@@ -177,7 +206,7 @@ abstract class Element extends Base {
 			}
 
 			foreach ( $this->validation as $validation ) {
-				if ( ! $validation->isValid( $value ) ) {
+				if ( ! $validation->isValid( $value, $this ) ) {
 					/*In the error message, %element% will be replaced by the element's label (or
 					name if label is not provided).*/
 					$this->_errors[] = str_replace( "%element%", $element, $validation->getMessage() );
@@ -241,21 +270,22 @@ abstract class Element extends Base {
 		$this->_form = $form;
 	}
 
-	/*This method provides a shortcut for applying the Required validation class to an element.*/
-
 	/**
+	 * This method provides a shortcut for applying the Required validation class to an element.
+	 *
 	 * @param $required
 	 */
 	public function setRequired( $required ) {
 		if ( ! empty( $required ) ) {
 			$this->validation[] = new Validation_Required;
+			$this->_attributes["required"] = "";
 		}
-		$this->_attributes["required"] = "";
+
 	}
 
-	/*This method applies one or more validation rules to an element.  If can accept a single concrete
-	validation class or an array of entries.*/
 	/**
+	 * This method applies one or more validation rules to an element.  If can accept a single concrete validation class or an array of entries.
+	 *
 	 * @param $validation
 	 */
 	public function setValidation( $validation ) {
@@ -272,5 +302,32 @@ abstract class Element extends Base {
 				}
 			}
 		}
+	}
+
+	/**
+	 * @return array
+	 */
+	public function getFieldOptions() {
+		return $this->field_options;
+	}
+
+	/**
+	 * @param $attribute
+	 *
+	 * @return string
+	 */
+	public function getOption( $attribute ) {
+		if ( ! empty ( $this->field_options[ $attribute ] ) ) {
+			return $this->field_options[ $attribute ];
+		}
+
+		return '';
+	}
+
+	/**
+	 * @param array $field_options
+	 */
+	public function setFieldOptions( $field_options ) {
+		$this->field_options = $field_options;
 	}
 }

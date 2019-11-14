@@ -33,7 +33,11 @@ function PFBC_Load( $class ) {
 	}
 }
 
-spl_autoload_register( "PFBC_Load" );
+try {
+	spl_autoload_register( "PFBC_Load" );
+} catch ( Exception $e ) {
+	trigger_error( 'BF::PFBC_Load::Autoload_Error', E_USER_NOTICE );
+}
 
 /**
  * Class Form
@@ -72,10 +76,6 @@ class Form extends Base {
 	 */
 	protected $ajaxCallback;
 	/**
-	 * @var ErrorView_Standard
-	 */
-	protected $errorView;
-	/**
 	 * @var bool
 	 */
 	protected $noLabel = false;
@@ -93,6 +93,10 @@ class Form extends Base {
 	 * @var View_SideBySide
 	 */
 	protected $view;
+	/**
+	 * @var ErrorHandler
+	 */
+	protected $global_error;
 
 	/**
 	 * Form constructor.
@@ -117,9 +121,9 @@ class Form extends Base {
 			$this->view = new View_SideBySide;
 		}
 
-		if ( empty( $this->errorView ) ) {
-			$this->errorView = new ErrorView_Standard;
-		}
+		$this->global_error = ErrorHandler::get_instance();
+
+		$this->global_error->set_form( $this );
 
 		/*The resourcesPath property is used to identify where third-party resources needed by the
 		project are located.  This property will automatically be set properly if the PFBC directory
@@ -134,41 +138,46 @@ class Form extends Base {
 		}
 	}
 
-	/*When a form is serialized and stored in the session, this function prevents any non-essential
-	information from being included.*/
-
 	/**
+	 * Check if the form Element is valid or not
+	 *
 	 * @param string $id
-	 * @param bool $clearValues
 	 *
 	 * @return bool
 	 */
-	public static function isValid( $id, $clearValues = true ) {
+	public static function isValid( $id ) {
 		$valid = true;
-		/*The form's instance is recovered (unserialized) from the session.*/
-		$form = self::recover( $id );
-		if ( ! empty( $form ) ) {
+		if ( ! empty( $id ) ) {
+			$global_error = ErrorHandler::get_instance();
 			if ( $_SERVER["REQUEST_METHOD"] == "POST" ) {
 				$data = $_POST;
 			} else {
 				$data = $_GET;
 			}
 
-			/*Any values/errors stored in the session for this form are cleared.*/
-			self::clearValues( $id );
-			self::clearErrors( $id );
+			$post_id       = ! empty( $data ) && ! empty( $data['post_id'] ) ? $data['post_id'] : 0;
+			$form_instance = self::recover_instance( $id, $post_id );
 
-			/*Each element's value is saved in the session and checked against any validation rules applied
-			to the element.*/
-			if ( ! empty( $form->_elements ) ) {
-				foreach ( $form->_elements as $element ) {
+			//Each element's value is saved in the session and checked against any validation rules applied to the element.
+			if ( ! empty( $form_instance ) && ! empty( $form_instance->_elements ) ) {
+				/** @var Element $element */
+				foreach ( $form_instance->_elements as $element ) {
 					$name = $element->getAttribute( "name" );
+
+					if ( $element instanceof Element_Email ) {
+						$element->setValidation( new Validation_Email() );
+					}
+
+					if ( $element instanceof Element_Upload ) {
+						$field_options = $element->getFieldOptions();
+						$name          = $field_options['slug'];
+					}
+
 					if ( substr( $name, - 2 ) == "[]" ) {
 						$name = substr( $name, 0, - 2 );
 					}
 
-					/*The File element must be handled differently b/c it uses the $_FILES superglobal and
-					not $_GET or $_POST.*/
+					//The File element must be handled differently b/c it uses the $_FILES superglobal and not $_GET or $_POST.
 					if ( $element instanceof Element_File ) {
 						$data[ $name ] = $_FILES[ $name ]["name"];
 					}
@@ -183,123 +192,59 @@ class Form extends Base {
 						} else {
 							$value = stripslashes( $value );
 						}
-						self::_setSessionValue( $id, $name, $value );
 					} else {
 						$value = null;
 					}
 
-					/*If a validation error is found, the error message is saved in the session along with
-					the element's name.*/
+					//If a validation error is found, the error message is saved in the session along with the element's name.
 					if ( is_array( $value ) ) {
 						foreach ( $value as $v ) {
 							if ( ! $element->isValid( $v ) ) {
-								self::setError( $id, $element->getErrors(), $name );
+								$global_error->add_error( new BF_Error( 'buddyforms_form_' . $id, $element->getErrors(), $name, $id ) );
 								$valid = false;
 							}
 						}
 					} else {
 						if ( ! $element->isValid( $value ) ) {
-							self::setError( $id, $element->getErrors(), $name );
+							$global_error->add_error( new BF_Error( 'buddyforms_form_' . $id, $element->getErrors(), $name, $id ) );
 							$valid = false;
 						}
 					}
 				}
 			}
-
-			/*If no validation errors were found, the form's session values are cleared.*/
-			if ( $valid ) {
-				if ( $clearValues ) {
-					self::clearValues( $id );
-				}
-				self::clearErrors( $id );
-			}
-		} else {
-			$valid = false;
 		}
 
 		return $valid;
 	}
 
 	/**
-	 * @param $id
+	 * This function create a new instance of the form by the From id
 	 *
-	 * @return mixed|string
-	 */
-	protected static function recover( $id ) {
-		$wp_session = BF_Session::get_instance();
-		if ( isset( $wp_session[ $id . '_form' ] ) ) {
-			$json = maybe_unserialize( $wp_session[ $id . '_form' ] );
-
-			return $json;
-		} else {
-			return "";
-		}
-	}
-
-	/*Values that have been set through the setValues method, either manually by the developer
-	or after validation errors, are applied to elements within this method.*/
-
-	/**
-	 * @param string $id
-	 */
-	public static function clearValues( $id ) {
-		$wp_session = BF_Session::get_instance();
-		if ( ! empty( $wp_session[ $id . "_values" ] ) ) {
-			unset( $wp_session[ $id . "_values" ] );
-		}
-	}
-
-	/**
-	 * @param string $id
-	 */
-	public static function clearErrors( $id ) {
-		$wp_session = BF_Session::get_instance();
-		if ( isset( $wp_session[ $id . "_errors" ] ) ) {
-			unset( $wp_session[ $id . "_errors" ] );
-		}
-	}
-
-	/**
 	 * @param $id
-	 * @param $element
-	 * @param $value
+	 * @param $post_id
+	 *
+	 * @return bool|Form
+	 * @since 2.4.7
 	 */
-	public static function _setSessionValue( $id, $element, $value ) {
-		$wp_session                    = BF_Session::get_instance();
-		$wp_session[ $id . "_values" ] = array( $element => $value );
-	}
+	protected static function recover_instance( $id, $post_id ) {
+		global $buddyforms;
+		$form_instance = false;
+		if ( ! empty( $buddyforms ) && ! empty( $buddyforms[ $id ] ) ) {
+			$form = $buddyforms[ $id ];
 
-	/**
-	 * @param $id
-	 * @param $errors
-	 * @param string $element
-	 */
-	public static function setError( $id, $errors, $element = "" ) {
-		$wp_session = BF_Session::get_instance();
+			$form_instance     = new Form( $id );
+			$form_instance_arg = array(
+				'post_type'    => $form['post_type'],
+				'customfields' => $form['form_fields'],
+				'post_id'      => $post_id,
+				'form_slug'    => $id,
+			);
 
-		if ( ! is_array( $errors ) ) {
-			$errors_array   = array();
-			$errors_array[] = $errors;
-			$errors         = $errors_array;
+			// if the form has custom field to save as post meta data they get displayed here
+			buddyforms_form_elements( $form_instance, $form_instance_arg, true );
 		}
 
-		$element_errors = json_decode( $wp_session[ $id . "_errors" ] );
-
-		foreach ( $errors as $key => $error ) {
-			$element_errors[] = $element . ' ' . $error;
-		}
-
-		$wp_session[ $id . "_errors" ] = json_encode( $element_errors );
-	}
-
-	/**
-	 * @param string $id
-	 */
-	public static function renderAjaxErrorResponse( $id ) {
-		$form = self::recover( $id );
-		if ( ! empty( $form ) ) {
-			$form->errorView->renderAjaxErrorResponse();
-		}
+		return $form_instance;
 	}
 
 	/**
@@ -383,15 +328,35 @@ class Form extends Base {
 		$name = $element->getAttribute( "name" );
 		if ( empty ( $id ) && $name ) {
 			$element->setAttribute( "id", $name );
-		} else if ( empty ( $id ) ) {
+		} elseif ( empty ( $id ) ) {
 			$element->setAttribute( "id", $this->_attributes["id"] . "-element-" . sizeof( $this->_elements ) );
 		}
 		$this->_elements[] = $element;
 
-		/*For ease-of-use, the form tag's encytype attribute is automatically set if the File element
-		class is added.*/
+		//For ease-of-use, the form tag's encytype attribute is automatically set if the File element class is added.
 		if ( $element instanceof Element_File ) {
 			$this->_attributes["enctype"] = "multipart/form-data";
+		}
+	}
+
+	/**
+	 * Override element in the element list for other element of the same type
+	 *
+	 * @param Element $new_element
+	 * @param $element_position
+	 *
+	 * @since 2.5.5
+	 *
+	 */
+	public function overrideExistingElement( Element $new_element, $element_position ) {
+		if ( ! empty( $this->_elements ) && isset( $this->_elements[ $element_position ] ) ) {
+			$this->_elements[ $element_position ] = $new_element;
+		}
+	}
+
+	public function overrideAllExistingElements( $new_elements ) {
+		if ( isset( $new_elements ) ) {
+			$this->_elements = array_values( $new_elements );
 		}
 	}
 
@@ -410,14 +375,7 @@ class Form extends Base {
 	 */
 	public function render( $element = null, $returnHTML = false ) {
 		$this->view->_setForm( $this );
-		$this->errorView->_setForm( $this );
 
-		/*When validation errors occur, the form's submitted values are saved in a session
-		array, which allows them to be pre-populated when the user is redirected to the form.*/
-		$values = self::getSessionValues( $this->_attributes["id"] );
-		if ( ! empty( $values ) ) {
-			$this->setValues( $values );
-		}
 		$this->applyValues();
 
 		if ( $returnHTML ) {
@@ -431,9 +389,6 @@ class Form extends Base {
 		$this->view->noLabel = $this->noLabel;
 		$this->view->render( $element );
 
-		/*The form's instance is serialized and saved in a session variable for use during validation.*/
-		$this->save();
-
 		if ( $returnHTML ) {
 			$html = ob_get_contents();
 			ob_end_clean();
@@ -442,21 +397,6 @@ class Form extends Base {
 		}
 
 		return false;
-	}
-
-	/**
-	 * @param string $id
-	 *
-	 * @return array
-	 */
-	protected static function getSessionValues( $id ) {
-		$wp_session = BF_Session::get_instance();
-		$values     = array();
-		if ( ! empty( $wp_session[ $id . "_values" ] ) ) {
-			$values = (array) $wp_session[ $id . "_values" ];
-		}
-
-		return $values;
 	}
 
 	protected function applyValues() {
@@ -470,14 +410,14 @@ class Form extends Base {
 		}
 	}
 
-	/*This method restores the serialized form instance.*/
-
+	/**
+	 * This method restores the serialized form instance.
+	 */
 	protected function renderCSS() {
-		//$this->renderCSSFiles();
+		$this->renderCSSFiles();
 
 		echo '<style type="text/css">';
 		$this->view->renderCSS();
-		$this->errorView->renderCSS();
 		foreach ( $this->_elements as $element ) {
 			$element->renderCSS();
 		}
@@ -493,7 +433,7 @@ class Form extends Base {
 			}
 		}
 
-		/*This section prevents duplicate css files from being loaded.*/
+		//This section prevents duplicate css files from being loaded.
 		if ( ! empty( $urls ) ) {
 			$urls = array_values( array_unique( $urls ) );
 			foreach ( $urls as $url ) {
@@ -502,13 +442,14 @@ class Form extends Base {
 		}
 	}
 
-	/*When ajax is used to submit the form's data, validation errors need to be manually sent back to the
-	form using json.*/
-
+	/**
+	 * When ajax is used to submit the form's data, validation errors need to be manually sent back to the form using json.
+	 */
 	protected function renderJS() {
 		$this->renderJSFiles();
 
-		echo '<script type="text/javascript">';
+		ob_start();
+		echo '<script dfd type="text/javascript">';
 		$this->view->renderJS();
 		foreach ( $this->_elements as $element ) {
 			$element->renderJS();
@@ -516,139 +457,28 @@ class Form extends Base {
 
 		$id        = $this->_attributes["id"];
 		$form_slug = str_replace( 'buddyforms_form_', '', $id );
-
-		/*When the form is submitted, disable all submit buttons to prevent duplicate submissions.*/
+		$method    = $this->_attributes['method'];
+		$prevent   = wp_json_encode( $this->prevent );
 		echo <<<JS
-        jQuery(document).ready(function() {
-
-			var bf_submit_type = "";
-		    jQuery(document).on("click", '.bf-submit', function (evt) {
-		        bf_submit_type = evt.target.name;
-		    });
-
-            jQuery("#$id").bind("submit", function() {
-                if (typeof(tinyMCE) != "undefined") {
-            		tinyMCE.triggerSave();
-            	}
-            	jQuery(this).find("#status").val(bf_submit_type);
-                jQuery(this).find("input[type=submit]").attr("disabled", "disabled");
-            });
+		jQuery(document.body).on('submit', '#$id', function (event) {
+            event.preventDefault();
+            if(BuddyFormsHooks){
+            	BuddyFormsHooks.doAction('buddyforms:form:render', ["$form_slug", $prevent, "$this->ajax", "$method"]);
+            } else {
+                alert('Error, contact the admin!');
+            }
+            return false;
+        });
 JS;
-
-		/*jQuery is used to set the focus of the form's initial element.*/
-		if ( ! in_array( "focus", $this->prevent ) ) {
-			echo 'jQuery("#', $id, ' :input:visible:enabled:first").focus();';
-		}
-
 		$this->view->jQueryDocumentReady();
 		foreach ( $this->_elements as $element ) {
 			$element->jQueryDocumentReady();
 		}
 
-		/*For ajax, an anonymous onsubmit javascript function is bound to the form using jQuery.  jQuery's
-		serialize function is used to grab each element's name/value pair.*/
-		if ( ! empty( $this->ajax ) ) {
-			echo <<<JS
-            jQuery("#$id").bind("submit", function() {
-JS;
+		echo '</script>';
+		$output = ob_get_clean();
 
-			/*Clear any existing validation errors.*/
-			$this->errorView->clear();
-
-			echo <<<JS
-
-				if (!jQuery("#$id").valid()) {
-			        return false;
-			    }
-
-				jQuery("#buddyforms_form_hero_$form_slug .form_wrapper form").LoadingOverlay("show", {
-				fade  : [2000, 1000]
-				});
-
-
-                var FormData = jQuery("#$id").serialize();
-
-                jQuery.ajax({
-                    url: ajaxurl,
-                    type: "{$this->_attributes["method"]}",
-                    dataType: 'json',
-                    data: {"action": "buddyforms_ajax_process_edit_post", "data": FormData},
-                    error: function(xhr, status, error){
-						  
-                        
-                        jQuery( '#form_message_$form_slug' ).addClass( 'bf-alert error' );
-                        jQuery( '#form_message_$form_slug' ).html( xhr.responseText );
-                        
-						  
-	                    console.log(xhr.responseText);
-	                    
-						jQuery("#$id").find("input[type=submit]").removeAttr("disabled");
-                        bf_form_errors();
-                        jQuery("#buddyforms_form_hero_$form_slug .form_wrapper form").LoadingOverlay("hide");
-                        
-                        
-                    },
-                    success: function(response) {
-
-                    console.log(response)
-
-                    jQuery.each(response, function (i, val) {
-
-                        switch (i) {
-                            case 'form_notice':
-                           		jQuery( '#form_message_$form_slug' ).addClass( 'bf-alert success' );
-                                jQuery( '#form_message_$form_slug' ).html( val );
-                                break;
-                            case 'form_remove':
-
-							    jQuery("#buddyforms_form_hero_$form_slug .form_wrapper").fadeOut("normal", function() {
-
-							        jQuery( '#buddyforms_form_hero_$form_slug .form_wrapper' ).remove();
-							    });
-                                break;
-                            case 'form_actions':
-                                jQuery( '#buddyforms_form_$form_slug .form-actions' ).html(val);
-                                break;
-                            default:
-                                jQuery( 'input[name="' + i + '"]').val(val);
-                        }
-                        jQuery('#recaptcha_reload').trigger('click');
-
-                    });
-					if(response != undefined && typeof response == "object" && response.errors) {
-JS;
-
-			$this->errorView->applyAjaxErrorResponse();
-
-			echo <<<JS
-
-
-	                } else {
-JS;
-			/*A callback function can be specified to handle any post submission events.*/
-			if ( ! empty( $this->ajaxCallback ) ) {
-				echo $this->ajaxCallback, "(response);";
-			}
-			/*After the form has finished submitting, re-enable all submit buttons to allow additional submissions.*/
-			echo <<<JS
-                        }
-                        jQuery("#$id").find("input[type=submit]").removeAttr("disabled");
-                        bf_form_errors();
-                        jQuery("#buddyforms_form_hero_$form_slug .form_wrapper form").LoadingOverlay("hide");
-
-                        // scrollto message after submit
-						 jQuery('html, body').animate({
-			            	 scrollTop: (jQuery("#buddyforms_form_hero_$form_slug"))
-		                 }, 2000);
-
-                    }
-                });
-                return false;
-            });
-JS;
-		}
-
-		echo '}); </script>';
+		echo $output;
 	}
 
 	protected function renderJSFiles() {
@@ -660,20 +490,13 @@ JS;
 			}
 		}
 
-		/*This section prevents duplicate js files from being loaded.*/
+		//This section prevents duplicate js files from being loaded.
 		if ( ! empty( $urls ) ) {
 			$urls = array_values( array_unique( $urls ) );
 			foreach ( $urls as $url ) {
 				echo '<script type="text/javascript" src="', $url, '"></script>';
 			}
 		}
-	}
-
-	protected function save() {
-		$wp_session                                       = BF_Session::get_instance();
-		$session_dada                                     = maybe_serialize( $this );
-		$wp_session[ $this->_attributes["id"] . "_form" ] = $session_dada;
-		$wp_session->write_data();
 	}
 
 	/**
@@ -690,7 +513,7 @@ JS;
 				if ( $key == 'ajax' ) {
 					$default['ajax']         = 1;
 					$default['ajaxCallback'] = $opts['ajax'];
-				} else if ( $key == 'view' ) {
+				} elseif ( $key == 'view' ) {
 					$viewName        = 'View_' . $val;
 					$default[ $key ] = new $viewName;
 				} else {
@@ -720,15 +543,15 @@ JS;
 				$props[0] = 1;
 			}
 
-			return self::$form->_close( $props[0] );
+			return self::_close( $props[0] );
 		}
 
 		return self::_call( self::$form, $type, $props );
 	}
 
-	/*The save method serialized the form's instance and saves it in the session.*/
-
 	/**
+	 * The save method serialized the form's instance and saves it in the session.
+	 *
 	 * @param $form
 	 * @param $type
 	 * @param $props
@@ -751,10 +574,9 @@ JS;
 		return $form;
 	}
 
-	/*Valldation errors are saved in the session after the form submission, and will be displayed to the user
-	when redirected back to the form.*/
-
 	/**
+	 * Valldation errors are saved in the session after the form submission, and will be displayed to the user when redirected back to the form.
+	 *
 	 * @return array
 	 */
 	public function __sleep() {
@@ -768,10 +590,9 @@ JS;
 		return $this->ajax;
 	}
 
-	/*An associative array is used to pre-populate form elements.  The keys of this array correspond with
-	the element names.*/
-
 	/**
+	 * An associative array is used to pre-populate form elements.  The keys of this array correspond with the element names.
+	 *
 	 * @return array
 	 */
 	public function getElements() {
@@ -779,10 +600,25 @@ JS;
 	}
 
 	/**
+	 * Remove one element from the array of elements
+	 *
+	 * @param $position
+	 *
+	 * @since 2.4.6
+	 *
+	 */
+	public function removeElement( $position ) {
+		if ( $position >= 0 ) {
+			unset( $this->_elements[ $position ] );
+			$this->_elements = array_values( $this->_elements );
+		}
+	}
+
+	/**
 	 * @return ErrorView_Standard
 	 */
 	public function getErrorView() {
-		return $this->errorView;
+		return $this->global_error->get_error_view();
 	}
 
 	/**
@@ -807,22 +643,19 @@ JS;
 	}
 
 	/**
-	 * @return array
+	 * Return an array errors
+	 *
+	 * @return WP_Error[]|BF_Error[]
+	 * @since 2.4.7
+	 *
 	 */
 	public function getErrors() {
-		$wp_session = BF_Session::get_instance();
-
-		$errors = array();
-		$id     = $this->_attributes["id"];
-
-		if ( isset( $wp_session[ $id . "_errors" ] ) ) {
-			$errors = json_decode( $wp_session[ $id . "_errors" ] );
-			if ( ! is_array( $errors ) ) {
-				$errors[] = $errors;
-			}
+		$global_error = ErrorHandler::get_instance();
+		if ( $global_error->get_global_error()->has_errors() ) {
+			return $global_error->get_global_error()->errors;
 		}
 
-		return $errors;
+		return array();
 	}
 
 	/**
@@ -847,7 +680,6 @@ JS;
 	public function _close( $buttons = 1 ) {
 		$this->renderCSS();
 		$this->renderJS();
-		$this->save();
 		if ( ! $buttons ) {
 			return $this->view->renderFormClose();
 		}

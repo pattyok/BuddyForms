@@ -45,7 +45,7 @@ $post_id = get_the_ID();
 			//"prevent" => array("bootstrap", "jQuery", "focus"),
 			//"action" => $redirect_to,
 			"view"  => new View_Metabox(),
-			'class' => 'standard-form',
+			'class' => 'standard-form bf-submission',
 		) );
 
 		$fields = $buddyforms[ $form_slug ]['form_fields'];
@@ -55,6 +55,7 @@ $post_id = get_the_ID();
 			'customfields' => $fields,
 			'post_id'      => $post_id,
 			'form_slug'    => $form_slug,
+			'action'       => 'view',
 		);
 
 		// if the form has custom field to save as post meta data they get displayed here

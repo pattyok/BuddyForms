@@ -142,22 +142,49 @@ function buddyforms_post_edit_form_tag() {
 }
 
 /**
+ * Update the post
+ * @param $data
+ * @param $postarr
+ *
+ * @return mixed
+ */
+function buddyforms_wp_insert_post_data($data, $postarr){
+    if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+		return $data;
+	}
+
+	if ( ! empty( $data['post_type'] ) && $data['post_type'] === 'buddyforms' && ! empty( $_POST['buddyforms_options'] ) && ! empty( $_POST['buddyforms_options']['slug'] ) ) {
+		$new_slug = sanitize_title( $_POST['buddyforms_options']['slug'] );
+		if ( ! empty( $data['post_name'] ) && $data['post_name'] !== $new_slug ) {
+			$result = buddyforms_update_form_slug( $data['post_name'], $new_slug );
+			if ( $result ) {
+				$data['post_name'] = $new_slug;
+			}
+		}
+	}
+
+    return $data;
+}
+
+add_filter('wp_insert_post_data', 'buddyforms_wp_insert_post_data', 10, 2);
+
+/**
  * Adds a box to the main column on the Post and Page edit screens.
  *
  * @param $post_id
  */
 function buddyforms_edit_form_save_meta_box_data( $post_id ) {
-	$post = WP_Post::get_instance($post_id);
-
 	if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
 		return;
 	}
 
-	if ( ! isset( $post->post_type ) || $post->post_type != 'buddyforms' ) {
+	if ( ! isset( $_POST['buddyforms_options'] ) ) {
 		return;
 	}
 
-	if ( ! isset( $_POST['buddyforms_options'] ) ) {
+	$post = WP_Post::get_instance($post_id);
+
+	if ( ! isset( $post->post_type ) || $post->post_type != 'buddyforms' ) {
 		return;
 	}
 
@@ -170,7 +197,7 @@ function buddyforms_edit_form_save_meta_box_data( $post_id ) {
 	// make sure the form fields slug and type is sanitised
 	if ( isset( $buddyform['form_fields'] ) && is_array( $buddyform['form_fields'] ) ) {
 		foreach ( $buddyform['form_fields'] as $key => $field ) {
-			$buddyform['form_fields'][ $key ]['slug'] = sanitize_title( $field['slug'] );
+			$buddyform['form_fields'][ $key ]['slug'] = buddyforms_sanitize_slug( $field['slug'] );
 			$buddyform['form_fields'][ $key ]['type'] = sanitize_title( $field['type'] );
 		}
 	}
@@ -571,25 +598,29 @@ function buddyforms_add_button_to_submit_box() {
 	?>
     <div id="buddyforms-actions" class="misc-pub-section">
 		<?php if ( isset( $post->post_name ) && $post->post_name != '' ) { ?>
-            <div id="frontend-actions">
-                <a class="button button-large bf_button_action" target="_blank"
-                   href="<?php echo $base ?>/?page_id=<?php echo $preview_page_id ?>&preview=true&form_slug=<?php echo $post->post_name ?>"><span
-                            class="dashicons dashicons-visibility"></span> <?php _e( 'Preview Form', 'buddyforms' ) ?>
-                </a>
-            </div>
+			<div id="frontend-actions">
+				<a class="button button-large bf_button_action" target="_blank"
+				   href="<?php echo $base ?>/?page_id=<?php echo $preview_page_id ?>&preview=true&form_slug=<?php echo $post->post_name ?>"><span
+						class="dashicons dashicons-visibility"></span> <?php _e('Preview Form', 'buddyforms') ?>
+				</a>
+			</div>
 		<?php } ?>
 		<?php if ( isset( $buddyform['attached_page'] ) && isset( $buddyform['post_type'] ) && $buddyform['attached_page'] != 'none' ) { ?>
-            <div id="frontend-actions">
-                <label for="button"><?php _e( 'Frontend', 'buddyforms' ) ?></label>
-				<?php echo '<a class="button button-large bf_button_action" href="' . $attached_page_permalink . 'view/' . $post->post_name . '/" target="_new"><span class="dashicons dashicons-admin-page"></span> ' . __( 'Your Submissions', 'buddyforms' ) . '</a>
-                <a class="button button-large bf_button_action" href="' . $attached_page_permalink . 'create/' . $post->post_name . '/" target="_new"><span class="dashicons dashicons-feedback"></span>    ' . __( 'The Form', 'buddyforms' ) . '</a>'; ?>
-            </div>
+			<div class="bf-tile actions">
+				<div id="frontend-actions">
+					<label for="button"><?php _e('Frontend', 'buddyforms') ?></label>
+					<?php echo '<a class="button button-large bf_button_action" href="' . $attached_page_permalink . 'view/' . $post->post_name . '/" target="_new"><span class="dashicons dashicons-admin-page"></span> ' . __('Your Submissions', 'buddyforms') . '</a>
+                <a class="button button-large bf_button_action" href="' . $attached_page_permalink . 'create/' . $post->post_name . '/" target="_new"><span class="dashicons dashicons-feedback"></span>    ' . __('The Form', 'buddyforms') . '</a>'; ?>
+				</div>
+			</div>
 		<?php }
 		if ( isset( $post->post_name ) && $post->post_name != '' ) { ?>
-            <div id="admin-actions">
-                <label for="button"><?php _e( 'Admin', 'buddyforms' ) ?></label>
-				<?php echo '<a class="button button-large bf_button_action" href="edit.php?post_type=buddyforms&page=buddyforms_submissions&form_slug=' . $post->post_name . '"><span class="dashicons dashicons-email"></span> ' . __( 'Submissions', 'buddyforms' ) . '</a>'; ?>
-            </div>
+			<div class="bf-tile actions">
+				<div id="admin-actions">
+					<label for="button"><?php _e('Admin', 'buddyforms') ?></label>
+					<?php echo '<a class="button button-large bf_button_action" href="edit.php?post_type=buddyforms&page=buddyforms_submissions&form_slug=' . $post->post_name . '"><span class="dashicons dashicons-email"></span> ' . __('Submissions', 'buddyforms') . '</a>'; ?>
+				</div>
+			</div>
 		<?php } ?>
 
         <div class="clear"></div>

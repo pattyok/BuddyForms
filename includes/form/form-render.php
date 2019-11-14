@@ -6,7 +6,7 @@
  * @return mixed|string
  */
 function buddyforms_form_html( $args ) {
-	global $buddyforms, $bf_form_error, $bf_submit_button, $post_id, $form_slug;
+	global $buddyforms, $bf_form_error, $post_id, $form_slug;
 
 	// First check if any form error exist
 	if ( ! empty( $bf_form_error ) ) {
@@ -15,7 +15,9 @@ function buddyforms_form_html( $args ) {
 		return $args;
 	}
 
-	$post_type = $the_post = $customfields = $post_id = $revision_id = $post_parent = $redirect_to = $form_slug = $form_notice = '';
+	/** @var WP_User $current_user */
+	$current_user = '';
+	$post_type    = $post_status = $the_post = $customfields = $revision_id = $post_parent = $redirect_to = $form_slug = $form_notice = '';
 
 	// Extract the form args
 	extract( shortcode_atts( array(
@@ -27,32 +29,43 @@ function buddyforms_form_html( $args ) {
 		'post_parent'  => 0,
 		'redirect_to'  => esc_url( $_SERVER['REQUEST_URI'] ),
 		'form_slug'    => '',
+		'post_status'  => '',
 		'form_notice'  => '',
+		'current_user' => false,
 	), $args ) );
 
 	$is_registration_form   = ! empty( $buddyforms[ $form_slug ]['form_type'] ) && 'registration' === $buddyforms[ $form_slug ]['form_type'];
 	$need_registration_form = ! empty( $buddyforms[ $form_slug ]['public_submit'] ) && 'registration_form' === $buddyforms[ $form_slug ]['public_submit'];
 
-	if ( ! is_user_logged_in() && !$is_registration_form && $need_registration_form ) {
+	if ( ! is_user_logged_in() && ! $is_registration_form && $need_registration_form ) {
 		return buddyforms_get_wp_login_form( $form_slug );
 	}
 
+	if ( empty( $post_id ) && ! empty( $the_post ) ) {
+		$post_id = $the_post->ID;
+	}
+
 	$user_can_edit = false;
-	if ( empty( $post_id ) && current_user_can( 'buddyforms_' . $form_slug . '_create' ) ) {
+	if ( empty( $post_id ) && bf_user_can( $current_user->ID, 'buddyforms_' . $form_slug . '_create', array(), $form_slug ) ) {
 		$user_can_edit = true;
-	} elseif ( ! empty( $post_id ) && current_user_can( 'buddyforms_' . $form_slug . '_edit' ) ) {
+	} elseif ( ! empty( $post_id ) && bf_user_can( $current_user->ID, 'buddyforms_' . $form_slug . '_edit', array(), $form_slug ) ) {
 		$user_can_edit = true;
 	}
 
-	$users_can_register = get_site_option( 'users_can_register' );
+	$users_can_register = false;
+	if ( is_multisite() ) {
+		$users_can_register = users_can_register_signup_filter();
+	} else {
+		$users_can_register = get_site_option( 'users_can_register' );
+	}
 
-	if ( $buddyforms[ $form_slug ]['form_type'] == 'registration' && empty( $users_can_register ) ) {
+	if ( ! empty( $buddyforms[ $form_slug ]['form_type'] ) && $buddyforms[ $form_slug ]['form_type'] == 'registration' && empty( $users_can_register ) ) {
 		$error_message = apply_filters( 'buddyforms_disable_registration_error_message', __( 'Sorry, but registration is disabled on this site at the moment.', 'buddyforms' ) );
 
 		return '<div class="bf-alert error">' . $error_message . '</div>';
 	}
 
-	if ( $buddyforms[ $form_slug ]['form_type'] == 'registration'
+	if ( ! empty( $buddyforms[ $form_slug ]['form_type'] ) && $buddyforms[ $form_slug ]['form_type'] == 'registration'
 	     || isset( $buddyforms[ $form_slug ]['public_submit'] ) && $buddyforms[ $form_slug ]['public_submit'] == 'public_submit'
 	) {
 		$user_can_edit = true;
@@ -68,7 +81,38 @@ function buddyforms_form_html( $args ) {
 	}
 
 	// Form HTML Start. The Form is rendered as last step.
-	$form_html = '<div id="buddyforms_form_hero_' . $form_slug . '" class="the_buddyforms_form ' . apply_filters( 'buddyforms_form_hero_classes', '' ) . '" >';
+	$form_html = '';
+	//Add the global css
+	ob_start();
+	require( BUDDYFORMS_INCLUDES_PATH . '/resources/pfbc/Style/GlobalStyle.php' );
+	$global_css = ob_get_clean();
+	if ( ! empty( $global_css ) ) {
+		$global_css = buddyforms_minify_css( $global_css );
+		$form_html  = $global_css;
+	}
+
+	if ( ! empty( $form_slug ) && ! empty( $buddyforms ) && isset( $buddyforms[ $form_slug ] ) ) {
+		$options                          = buddyforms_filter_frontend_js_form_options( $buddyforms[ $form_slug ], $form_slug, $post_id );
+		$front_js_arguments[ $form_slug ] = $options;
+		BuddyForms::buddyforms_js_global_set_parameters( $front_js_arguments );
+	}
+
+	$buddyforms_global_js_data = apply_filters( 'buddyforms_global_localize_scripts', BuddyForms::buddyforms_js_global_get_parameters( $form_slug ) );
+	if ( is_array( $buddyforms_global_js_data ) ) {
+		$output = 'var buddyformsGlobal = ' . wp_json_encode( $buddyforms_global_js_data );
+		ob_start();
+		echo "<script type='text/javascript'>\n"; // CDATA and type='text/javascript' is not needed for HTML 5.
+		echo "/* <![CDATA[ */\n";
+		echo "$output\n";
+		echo "/* ]]> */\n";
+		echo "</script>\n";
+		$global_js = ob_get_clean();
+		if ( ! empty( $global_js ) ) {
+			$form_html .= $global_js;
+		}
+	}
+	// Form start point
+	$form_html .= '<div id="buddyforms_form_hero_' . $form_slug . '" class="the_buddyforms_form ' . apply_filters( 'buddyforms_form_hero_classes', '' ) . '" >';
 
 	// Hook above the form inside the BuddyForms form div
 	$form_html = apply_filters( 'buddyforms_form_hero_top', $form_html, $form_slug );
@@ -92,9 +136,9 @@ function buddyforms_form_html( $args ) {
 	$bfdesign['label_font_style']          = isset( $bfdesign['label_font_style'] ) ? $bfdesign['label_font_style'] : 'bold';
 
 	// Form Elements
-	$bfdesign['other_elements_disable_css']        = isset( $bfdesign['other_elements_disable_css'] ) ? $bfdesign['other_elements_disable_css'] : '';
-	$bfdesign['radio_button_alignment'] = isset( $bfdesign['radio_button_alignment'] ) ? $bfdesign['radio_button_alignment'] : 'inline';
-	$bfdesign['checkbox_alignment']     = isset( $bfdesign['checkbox_alignment'] ) ? $bfdesign['checkbox_alignment'] : 'inline';
+	$bfdesign['other_elements_disable_css'] = isset( $bfdesign['other_elements_disable_css'] ) ? $bfdesign['other_elements_disable_css'] : '';
+	$bfdesign['radio_button_alignment']     = isset( $bfdesign['radio_button_alignment'] ) ? $bfdesign['radio_button_alignment'] : 'inline';
+	$bfdesign['checkbox_alignment']         = isset( $bfdesign['checkbox_alignment'] ) ? $bfdesign['checkbox_alignment'] : 'inline';
 
 	// Text Fields
 	$bfdesign['field_padding']                   = isset( $bfdesign['field_padding'] ) ? $bfdesign['field_padding'] : '15';
@@ -135,253 +179,18 @@ function buddyforms_form_html( $args ) {
 	$bfdesign['custom_css'] = isset( $bfdesign['custom_css'] ) ? $bfdesign['custom_css'] : '';
 
 	// Extras
-	$bfdesign['extras_disable_all_css']        = isset( $bfdesign['extras_disable_all_css'] ) ? $bfdesign['extras_disable_all_css'] : '';
+	$bfdesign['extras_disable_all_css'] = isset( $bfdesign['extras_disable_all_css'] ) ? $bfdesign['extras_disable_all_css'] : '';
 
 
 	// only output the whole CSS if the option to disable CSS is unchecked
-	if( $bfdesign['extras_disable_all_css'] == '' ) {
-
-		ob_start(); ?>
-
-	    <style>
-
-					<?php
-					// only output CSS for labels if the option to disable CSS is unchecked
-					if( $bfdesign['labels_disable_css'] == '' ) { ?>
-				    /* Design Options - Labels */
-				    .the_buddyforms_form .bf_field_group label {
-				        margin-right: 10px;
-						    <?php
-								// Font Size
-								if( $bfdesign['label_font_size'] != '' ) {
-									echo 'font-size: ' . $bfdesign['label_font_size'] . 'px;';
-								}
-								// Font Color
-								if( $bfdesign['label_font_color']['style'] == 'color' ) {
-									echo 'color: ' . $bfdesign['label_font_color']['color'] . ';';
-								}
-								// Font Weight
-								if( $bfdesign['label_font_style'] == 'bolditalic' || $bfdesign['label_font_style'] == 'bold' ) {
-									echo 'font-weight: bold;';
-								} else {
-									echo 'font-weight: normal;';
-								}
-								// Font Style
-								if( $bfdesign['label_font_style'] == 'bolditalic' || $bfdesign['label_font_style'] == 'italic' ) 	{
-									echo 'font-style: italic;';
-								} else {
-									echo 'font-style: normal;';
-								} ?>;
-				    }
-					<?php } ?>
-
-					<?php
-					// only output CSS for these form elements if the option to disable CSS is unchecked
-					if( $bfdesign['other_elements_disable_css'] == '' ) { ?>
-		        /* Design Options - Form Elements */
-		        .the_buddyforms_form .bf-input .radio {
-		            display: <?php echo $bfdesign['radio_button_alignment']; ?>;
-		        }
-
-		        .the_buddyforms_form .bf-input .checkbox {
-		            display: <?php echo $bfdesign['checkbox_alignment']; ?>;
-		        }
-					<?php } ?>
-
-					<?php
-					// only output CSS for form elements if the option to disable CSS is unchecked
-					if( empty($bfdesign['field_disable_css']) ) { ?>
-		        /* Design Options - Text Fields */
-		        .the_buddyforms_form .bf-input textarea,
-		        .the_buddyforms_form .bf-input .form-control {
-		            display: block;
-		            width: 100%;
-		        		<?php
-								// Padding
-								if( $bfdesign['field_padding'] != '' ) {
-									echo 'padding: ' . $bfdesign['field_padding'] . 'px;';
-								}
-								// Background Color
-								if( $bfdesign['field_background_color']['style'] == 'color' ) {
-									echo 'background-color: ' . $bfdesign['field_background_color']['color'] . ';';
-								} elseif( $bfdesign['field_background_color']['style'] == 'transparent' ) {
-									echo 'background-color: transparent;';
-								}
-								// Border Color
-								if( $bfdesign['field_border_color']['style'] == 'color' ) {
-									echo 'border-color: ' . $bfdesign['field_border_color']['color'] . ';';
-								} elseif( $bfdesign['field_border_color']['style'] == 'transparent' ) {
-									echo 'border-color: transparent;';
-								}
-								// Border Width
-								if( $bfdesign['field_border_width'] != '' ) {
-									echo 'border-width: ' . $bfdesign['field_border_width'] . 'px; border-style: solid;';
-								}
-								// Border Radius
-								if( $bfdesign['field_border_radius'] != '' ) {
-									echo 'border-radius: ' . $bfdesign['field_border_radius'] . 'px;';
-								}
-								// Font Size
-								if( $bfdesign['field_font_size'] != '' ) {
-									echo 'font-size: ' . $bfdesign['field_font_size'] . 'px;';
-								}
-								// Font Color
-								if( $bfdesign['field_font_color']['style'] == 'color' ) {
-									echo 'color: ' . $bfdesign['field_font_color']['color'] . ';';
-								} ?>
-		        }
-
-		        /* Design Options - Text Fields Active */
-		        .the_buddyforms_form .bf-input textarea:focus,
-		        .the_buddyforms_form .bf-input .form-control:focus {
-		        	<?php
-							// Background Color
-							if( $bfdesign['field_active_background_color']['style'] == 'color' ) {
-								echo 'background-color: ' . $bfdesign['field_active_background_color']['color'] . ';';
-							} elseif( $bfdesign['field_active_background_color']['style'] == 'transparent' ) {
-								echo 'background-color: transparent;';
-							}
-							// Border Color
-							if( $bfdesign['field_active_border_color']['style'] == 'color' ) {
-								echo 'border-color: ' . $bfdesign['field_active_border_color']['color'] . ';';
-							} elseif( $bfdesign['field_active_border_color']['style'] == 'transparent' ) {
-								echo 'border-color: transparent;';
-							}
-							// Font Color
-							if( $bfdesign['field_active_font_color']['style'] == 'color' ) {
-								echo 'color: ' . $bfdesign['field_active_font_color']['color'] . ';';
-							} ?>
-		        }
-
-		        <?php // Placeholder Font Color
-						if( $bfdesign['field_placeholder_font_color']['style'] == 'color' ) {
-							echo '.the_buddyforms_form .bf-input textarea::placeholder,
-										.the_buddyforms_form .bf-input .form-control::placeholder {
-												color: ' . $bfdesign['field_placeholder_font_color']['color'] . ';
-											}';
-						} ?>
-
-					<?php } ?>
-
-
-					<?php
-					// only output CSS for descriptions if the option to disable CSS is unchecked
-					if( empty($bfdesign['desc_disable_css']) ) { ?>
-
-		        /* Design Options - Descriptions */
-		        .the_buddyforms_form span.help-inline,
-		        .the_buddyforms_form span.help-block {
-		            padding: 5px 0;
-		        		<?php
-								// Font Size
-								if( $bfdesign['desc_font_size'] != '' ) {
-									echo 'font-size: ' . $bfdesign['desc_font_size'] . 'px;';
-								}
-								// Font Color
-								if( $bfdesign['desc_font_color']['style'] == 'color' ) {
-									echo 'color: ' . $bfdesign['desc_font_color']['color'] . ';';
-								}
-								// Font Style
-								if( $bfdesign['desc_font_style'] == 'italic' ) 	{
-									echo 'font-style: italic;';
-								} else {
-									echo 'font-style: normal;';
-								} ?>;
-		        }
-					<?php } ?>
-
-
-					<?php
-					// only output CSS for buttons if the option to disable CSS is unchecked
-					if( empty($bfdesign['button_disable_css']) ) { ?>
-		        /* Design Options - Buttons */
-		        .the_buddyforms_form .form-actions button.bf-submit {
-		        	<?php
-							// Button Width
-							if( $bfdesign['button_width'] != 'inline' ) {
-								echo 'display: block; width: 100%;'; }
-							else {
-								echo 'display: inline; width: auto;';
-							}
-							// Button Size
-							if( $bfdesign['button_size'] == 'large' ) {
-								echo 'padding: 12px 25px; font-size: 17px;';
-							}
-							if( $bfdesign['button_size'] == 'xlarge' ) {
-								echo 'padding: 15px 32px; font-size: 19px;';
-							}
-							// Background Color
-							if( $bfdesign['button_background_color']['style'] == 'color' ) {
-								echo 'background-color: ' . $bfdesign['button_background_color']['color'] . ';';
-							} elseif( $bfdesign['button_background_color']['style'] == 'transparent' ) {
-								echo 'background-color: transparent;';
-							}
-							// Font Color
-							if( $bfdesign['button_font_color']['style'] == 'color' ) {
-								echo 'color: ' . $bfdesign['button_font_color']['color'] . ';';
-							}
-							// Border Radius
-							if( $bfdesign['button_border_radius'] != '' ) {
-								echo 'border-radius: ' . $bfdesign['button_border_radius'] . 'px;';
-							}
-							// Border Width
-							if( $bfdesign['button_border_width'] != '' ) {
-								echo 'border-width: ' . $bfdesign['button_border_width'] . 'px; border-style: solid;';
-							}
-							// Border Color
-							if( $bfdesign['button_border_color']['style'] == 'color' ) {
-								echo 'border-color: ' . $bfdesign['button_border_color']['color'] . ';';
-							} elseif( $bfdesign['button_border_color']['style'] == 'transparent' ) {
-								echo 'border-color: transparent;';
-							} ?>
-		        }
-
-		        .the_buddyforms_form form .form-actions {
-		            text-align: <?php echo $bfdesign['button_alignment']; ?>;
-		        }
-
-		        <?php // Button Width Behaviour -- if always on block
-						if( $bfdesign['button_width'] != 'block' ) {
-							echo '@media (min-width: 768px) {
-											.the_buddyforms_form .form-actions button.bf-submit {
-												display: inline;
-												width: auto;
-											}
-										}';
-						} ?>
-
-		        /* Design Options - Buttons Hover State */
-		        .the_buddyforms_form .form-actions button.bf-submit:hover,
-		        .the_buddyforms_form .form-actions button.bf-submit:focus {
-		        	<?php
-							// Background Color
-							if( $bfdesign['button_background_color_hover']['style'] == 'color' ) {
-								echo 'background-color: ' . $bfdesign['button_background_color_hover']['color'] . ';';
-							} elseif( $bfdesign['button_background_color_hover']['style'] == 'transparent' ) {
-								echo 'background-color: transparent;';
-							}
-							// Font Color
-							if( $bfdesign['button_font_color_hover']['style'] == 'color' ) {
-								echo 'color: ' . $bfdesign['button_font_color_hover']['color'] . ';';
-							}
-							// Border Color
-							if( $bfdesign['button_border_color_hover']['style'] == 'color' ) {
-								echo 'border-color: ' . $bfdesign['button_border_color_hover']['color'] . ';';
-							} elseif( $bfdesign['button_border_color_hover']['style'] == 'transparent' ) {
-								echo 'border-color: transparent;';
-							} ?>
-		        }
-					<?php } ?>
-
-	        <?php echo $bfdesign['custom_css']; ?>
-
-	    </style>
-
-		<?php
+	if ( $bfdesign['extras_disable_all_css'] == '' ) {
+		ob_start();
+		require( BUDDYFORMS_INCLUDES_PATH . '/resources/pfbc/Style/FormStyle.php' );
 		$layout = ob_get_clean();
-
-		$form_html .= $layout;
-
+		if ( ! empty( $layout ) ) {
+			$layout    = buddyforms_minify_css( $layout );
+			$form_html .= $layout;
+		}
 	}
 
 
@@ -390,10 +199,10 @@ function buddyforms_form_html( $args ) {
 
 	$buddyforms_frontend_form_template_name = apply_filters( 'buddyforms_frontend_form_template', 'View_Frontend' );
 
-	$form_class = 'standard-form';
+	$form_class = 'standard-form buddyforms-' . $form_slug . ' ';
 
 	if ( ! isset( $buddyforms[ $form_slug ]['local_storage'] ) ) {
-		$form_class = ' bf-garlic';
+		$form_class .= ' bf-garlic';
 	}
 
 	// Set the form attribute
@@ -406,24 +215,25 @@ function buddyforms_form_html( $args ) {
 		'method'  => 'post'
 	) );
 
-	$form->addElement( new Element_HTML( do_action( 'template_notices' ) ) );
+	ob_start();
+	do_action( 'template_notices' );
+	$template_notices = ob_get_contents();
+	$form->addElement( new Element_HTML( $template_notices ) );
 	$form->addElement( new Element_HTML( wp_nonce_field( 'buddyforms_form_nonce', '_wpnonce', true, false ) ) );
 	//Honey Pot
-	$honey_pot = new Element_HTML( '<input data-storage="false" type="text" value="" style="display: none" id="bf_hweb" name="bf_hweb" />');
+	$honey_pot = new Element_HTML( '<input type="text" value="" id="bf_hweb" name="bf_hweb" />' );
 	$form->addElement( $honey_pot );
 
 	$form->addElement( new Element_Hidden( "redirect_to", $redirect_to ) );
 	$form->addElement( new Element_Hidden( "post_id", $post_id ) );
+	if ( is_user_logged_in() ) {
+		$form->addElement( new Element_Hidden( "post_author", ! empty( $current_user ) ? $current_user->ID : 0 ) );
+	}
 	$form->addElement( new Element_Hidden( "revision_id", $revision_id ) );
 	$form->addElement( new Element_Hidden( "post_parent", $post_parent ) );
 	$form->addElement( new Element_Hidden( "form_slug", $form_slug ) );
 	$form->addElement( new Element_Hidden( "bf_post_type", $post_type ) );
 	$form->addElement( new Element_Hidden( "form_type", isset( $buddyforms[ $form_slug ]['form_type'] ) ? $buddyforms[ $form_slug ]['form_type'] : '' ) );
-
-	$exist_field_status = buddyforms_exist_field_type_in_form( $form_slug, 'status' );
-	if ( ! $exist_field_status ) {
-		$form->addElement( new Element_Hidden( "status", 'draft', array( 'id' => "status" ) ) );
-	}
 
 	if ( isset( $buddyforms[ $form_slug ]['bf_ajax'] ) ) {
 		$form->addElement( new Element_Hidden( "ajax", 'off' ) );
@@ -432,30 +242,28 @@ function buddyforms_form_html( $args ) {
 	// if the form has custom field to save as post meta data they get displayed here
 	buddyforms_form_elements( $form, $args );
 
-
 	$form->addElement( new Element_Hidden( "bf_submitted", 'true', array( 'value' => 'true', 'id' => "submitted" ) ) );
 
-	$bf_button_classes = 'bf-submit ' . isset( $bfdesign['button_class'] ) && ! empty( $bfdesign['button_class'] ) ? $bfdesign['button_class'] : '';
-	$bf_button_text    = isset( $bfdesign['submit_text'] ) && ! empty( $bfdesign['submit_text'] ) ? $bfdesign['submit_text'] : __( 'Submit', 'buddyforms' );
+	$exist_field_status = buddyforms_exist_field_type_in_form( $form_slug, 'status' );
+	if ( ! $exist_field_status ) {
+		$setup_form_status = ! empty( $buddyforms[ $form_slug ]['status'] ) ? $buddyforms[ $form_slug ]['status'] : 'publish';
+		$post_status       = ( ! empty( $post_status ) ) ? $post_status : $setup_form_status;
+		$form->addElement( new Element_Hidden( "status", $post_status, array( 'id' => "status" ) ) );
+	}
 
-	$bf_submit_button = new Element_Button( $bf_button_text, 'submit', array(
-		'id'    => $form_slug,
-		'class' => $bf_button_classes,
-		'name'  => 'submitted'
-	) );
-	$form             = apply_filters( 'buddyforms_create_edit_form_button', $form, $form_slug, $post_id );
-
-	if ( $bf_submit_button ) {
-		$form->addElement( $bf_submit_button );
+	$exist_field_form_actions = buddyforms_exist_field_type_in_form( $form_slug, 'form_actions' );
+	if ( ! $exist_field_form_actions ) {
+		$form = buddyforms_form_action_buttons( $form, $form_slug, $post_id, array() );
 	}
 
 	$form = apply_filters( 'buddyforms_form_before_render', $form, $args );
 
 	// That's it! render the form!
-	ob_start();
 	$form->render();
-	$form_html .= ob_get_contents();
-	ob_clean();
+	$output = ob_get_clean();
+	if ( ! empty( $output ) ) {
+		$form_html .= $output;
+	}
 
 	$form_html .= '<div class="bf_modal"></div></div>';
 
@@ -463,8 +271,10 @@ function buddyforms_form_html( $args ) {
 	if ( isset( $buddyforms[ $form_slug ]['revision'] ) && $post_id != 0 ) {
 		ob_start();
 		buddyforms_wp_list_post_revisions( $post_id );
-		$form_html .= ob_get_contents();
-		ob_clean();
+		$output = ob_get_clean();
+		if ( ! empty( $output ) ) {
+			$form_html .= $output;
+		}
 	}
 
 	// Hook under the form inside the BuddyForms form div
@@ -486,9 +296,49 @@ function buddyforms_form_html( $args ) {
 function buddyforms_get_login_form_template() {
 
 	ob_start();
-	buddyforms_locate_template( 'login-form' );
+	buddyforms_locate_template( 'login-form', 'none' );
 	$login_form = ob_get_clean();
 
 	return $login_form;
+}
 
+/**
+ * @param $css
+ *
+ * @return mixed|string|string[]|null
+ */
+function buddyforms_minify_css( $css ) {
+	// from the awesome CSS JS Booster: https://github.com/Schepp/CSS-JS-Booster
+	// all credits to Christian Schaefer: http://twitter.com/derSchepp
+	// remove comments
+	$css = preg_replace( '!/\*[^*]*\*+([^/][^*]*\*+)*/!', '', $css );
+	// backup values within single or double quotes
+	preg_match_all( '/(\'[^\']*?\'|"[^"]*?")/ims', $css, $hit, PREG_PATTERN_ORDER );
+	for ( $i = 0; $i < count( $hit[1] ); $i ++ ) {
+		$css = str_replace( $hit[1][ $i ], '##########' . $i . '##########', $css );
+	}
+	// remove traling semicolon of selector's last property
+	$css = preg_replace( '/;[\s\r\n\t]*?}[\s\r\n\t]*/ims', "}\r\n", $css );
+	// remove any whitespace between semicolon and property-name
+	$css = preg_replace( '/;[\s\r\n\t]*?([\r\n]?[^\s\r\n\t])/ims', ';$1', $css );
+	// remove any whitespace surrounding property-colon
+	$css = preg_replace( '/[\s\r\n\t]*:[\s\r\n\t]*?([^\s\r\n\t])/ims', ':$1', $css );
+	// remove any whitespace surrounding selector-comma
+	$css = preg_replace( '/[\s\r\n\t]*,[\s\r\n\t]*?([^\s\r\n\t])/ims', ',$1', $css );
+	// remove any whitespace surrounding opening parenthesis
+	$css = preg_replace( '/[\s\r\n\t]*{[\s\r\n\t]*?([^\s\r\n\t])/ims', '{$1', $css );
+	// remove any whitespace between numbers and units
+	$css = preg_replace( '/([\d\.]+)[\s\r\n\t]+(px|em|pt|%)/ims', '$1$2', $css );
+	// shorten zero-values
+	$css = preg_replace( '/([^\d\.]0)(px|em|pt|%)/ims', '$1', $css );
+	// constrain multiple whitespaces
+	$css = preg_replace( '/\p{Zs}+/ims', ' ', $css );
+	// remove newlines
+	$css = str_replace( array( "\r\n", "\r", "\n" ), '', $css );
+	// Restore backupped values within single or double quotes
+	for ( $i = 0; $i < count( $hit[1] ); $i ++ ) {
+		$css = str_replace( '##########' . $i . '##########', $hit[1][ $i ], $css );
+	}
+
+	return $css;
 }

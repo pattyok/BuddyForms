@@ -2,6 +2,8 @@
 
 add_action( 'buddyforms_process_submission_end', 'mail_submission_trigger_sent' );
 /**
+ * Start the email notification process
+ *
  * @param $args
  */
 function mail_submission_trigger_sent( $args ) {
@@ -34,53 +36,46 @@ function mail_submission_trigger_sent( $args ) {
 function buddyforms_send_mail_submissions( $notification, $post ) {
 	global $form_slug, $buddyforms;
 
-	$pub_post = $post;
-	$post_ID  = $post->ID;
+	$post_ID = $post->ID;
 
-	$author_id  = $pub_post->post_author;
-	$post_title = $pub_post->post_title;
+	$author_id  = $post->post_author;
+	$post_title = $post->post_title;
 	$postperma  = get_permalink( $post_ID );
 	$user_info  = get_userdata( $author_id );
 
-	$usernameauth  = $user_info->user_login;
-	$user_nicename = $user_info->user_nicename;
+	$usernameauth  = ! empty( $user_info ) ? $user_info->user_login : '';
+	$user_nicename = ! empty( $user_info ) ? $user_info->user_nicename : '';
 
 	$mail_notification_trigger = $notification;
 
-	$user_email = isset( $_POST['user_email'] ) ? $_POST['user_email'] : $user_info->user_email;
+	$user_email = ! empty( $_POST['user_email'] ) ? $_POST['user_email'] : '';
+	if ( empty( $user_email ) ) {
+		$user_email = ! empty( $user_info ) && ! empty( $user_info->user_email ) ? $user_info->user_email : '';
+	}
 
 	$mail_to = array();
 
 	// Check the Sent mail to checkbox
 	if ( isset( $mail_notification_trigger['mail_to'] ) ) {
 		foreach ( $mail_notification_trigger['mail_to'] as $key => $mail_address ) {
-
-			if ( $mail_address == 'submitter' ) {
+			if ( $mail_address == 'submitter' && ! empty( $user_email ) ) {
 				array_push( $mail_to, $user_email );
 			}
 
 			if ( $mail_address == 'admin' ) {
 				array_push( $mail_to, get_option( 'admin_email' ) );
 			}
-
 		}
 	}
 
 	// Check if mail to addresses
 	if ( isset( $mail_notification_trigger['mail_to_address'] ) ) {
-
 		$mail_to_address = explode( ',', str_replace( ' ', '', $mail_notification_trigger['mail_to_address'] ) );
-
-		foreach ( $mail_to_address as $key => $mail_address ) {
-
-			$user_email   = isset( $_POST['user_email'] ) ? $_POST['user_email'] : $user_email;
-			$mail_address = str_replace( '[user_email]', $user_email, $mail_address );
-
+		foreach ( $mail_to_address as $mail_address ) {
 			if ( ! empty( $mail_address ) ) {
+				$mail_address = buddyforms_get_field_value_from_string( $mail_address, $post_ID, $form_slug );
 				array_push( $mail_to, $mail_address );
 			}
-
-
 		}
 	}
 
@@ -90,6 +85,7 @@ function buddyforms_send_mail_submissions( $notification, $post ) {
 		$mail_to_address = explode( ',', str_replace( ' ', '', $mail_notification_trigger['mail_to_cc_address'] ) );
 		foreach ( $mail_to_address as $key => $mail_address ) {
 			if ( ! empty( $mail_address ) ) {
+				$mail_address = buddyforms_get_field_value_from_string( $mail_address, $post_ID, $form_slug );
 				array_push( $mail_to_cc, $mail_address );
 			}
 		}
@@ -101,19 +97,27 @@ function buddyforms_send_mail_submissions( $notification, $post ) {
 		$mail_to_address = explode( ',', str_replace( ' ', '', $mail_notification_trigger['mail_to_bcc_address'] ) );
 		foreach ( $mail_to_address as $key => $mail_address ) {
 			if ( ! empty( $mail_address ) ) {
+				$mail_address = buddyforms_get_field_value_from_string( $mail_address, $post_ID, $form_slug );
 				array_push( $mail_to_bcc, $mail_address );
 			}
 		}
 	}
 
-	$first_name = isset( $_POST['user_first'] ) ? $_POST['user_first'] : $user_info->user_firstname;
-	$last_name  = isset( $_POST['user_last'] ) ? $_POST['user_last'] : $user_info->user_lastname;
+	$first_name = ! empty( $_POST['user_first'] ) ? $_POST['user_first'] : '';
+	if ( empty( $first_name ) ) {
+		$first_name = ! empty( $user_info ) && ! empty( $user_info->user_firstname ) ? $user_info->user_firstname : '';
+	}
+	$last_name = ! empty( $_POST['user_last'] ) ? $_POST['user_last'] : '';
+	if ( empty( $last_name ) ) {
+		$last_name = ! empty( $user_info ) && ! empty( $user_info->user_lastname ) ? $user_info->user_lastname : '';
+	}
 
 	$blog_title  = get_bloginfo( 'name' );
 	$siteurl     = get_bloginfo( 'wpurl' );
 	$siteurlhtml = "<a href='$siteurl' target='_blank' >$siteurl</a>";
 
 	$subject = isset( $_POST['subject'] ) ? $_POST['subject'] : $mail_notification_trigger['mail_subject'];
+	$subject = buddyforms_get_field_value_from_string( $subject, $post_ID, $form_slug );
 
 	$from_name = isset( $mail_notification_trigger['mail_from_name'] ) ? $mail_notification_trigger['mail_from_name'] : 'blog_title';
 
@@ -131,7 +135,7 @@ function buddyforms_send_mail_submissions( $notification, $post ) {
 			$from_name = $first_name . ' ' . $last_name;
 			break;
 		case 'custom':
-			$from_name = $mail_notification_trigger['mail_from_name_custom'];
+			$from_name = buddyforms_get_field_value_from_string( $mail_notification_trigger['mail_from_name_custom'], $post_ID, $form_slug );
 			break;
 		default:
 			$from_name = $blog_title;
@@ -149,6 +153,7 @@ function buddyforms_send_mail_submissions( $notification, $post ) {
 			break;
 		case 'custom':
 			$from_email = isset( $mail_notification_trigger['mail_from_custom'] ) ? $mail_notification_trigger['mail_from_custom'] : $from_email;
+			$from_email = buddyforms_get_field_value_from_string( $from_email, $post_ID, $form_slug );
 			break;
 		default:
 			$from_email = $user_email;
@@ -157,90 +162,44 @@ function buddyforms_send_mail_submissions( $notification, $post ) {
 
 	$emailBody = isset( $mail_notification_trigger['mail_body'] ) ? $mail_notification_trigger['mail_body'] : '';
 
+	$post_link_html = ! empty( $postperma ) ? sprintf( '<a href="%s" target="_blank">%s</a>', $postperma, $postperma ) : '';
+
+	$short_codes_and_values = array(
+		'[user_login]'                => $usernameauth,
+		'[user_nicename]'             => $user_nicename,
+		'[user_email]'                => $user_email,
+		'[first_name]'                => $first_name,
+		'[last_name]'                 => $last_name,
+		'[published_post_link_plain]' => $postperma,
+		'[published_post_link_html]'  => $post_link_html,
+		'[published_post_title]'      => $post_title,
+		'[site_name]'                 => $blog_title,
+		'[site_url]'                  => $siteurl,
+		'[site_url_html]'             => $siteurlhtml,
+		'[form_elements_table]'       => buddyforms_mail_notification_form_elements_as_table( $form_slug, $post ),
+	);
+
 	// If we have content let us check if there are any tags we need to replace with the correct values.
 	if ( ! empty( $emailBody ) ) {
-
 		$emailBody = stripslashes( $emailBody );
-		if ( isset( $buddyforms[ $form_slug ]['form_fields'] ) ) {
-			foreach ( $buddyforms[ $form_slug ]['form_fields'] as $field_id => $field ) {
-
-				$value = isset( $_POST[ $field['slug'] ] ) ? $_POST[ $field['slug'] ] : '';
-
-				// Check if is array
-				if ( is_array( $value ) ) {
-					$field_value = implode( ',', $value );
-				} else {
-					$field_value = $value;
-				}
-
-
-				switch ( $field['type'] ) {
-					case 'taxonomy':
-						if ( is_array( $value ) ) {
-							foreach ( $value as $cat ) {
-								$term    = get_term( $cat, $field['taxonomy'] );
-								$terms[] = $term->name;
-							}
-							$field_value = implode( ',', $terms );
-						} else {
-							$term        = get_term( $value, $field['taxonomy'] );
-							$field_value = $term->name;
-						}
-						break;
-					case 'link':
-						$field_value = "<p><a href='" . $value . "' " . $field['name'] . ">" . $value . " </a></p>";
-						break;
-					case 'user_website':
-						$field_value = "<p><a href='" . $value . "' " . $field['name'] . ">" . $value . " </a></p>";
-						break;
-				}
-
-				// Replace From name Shortcodes with form element values
-				$from_name = buddyforms_email_replace_shortcode( $from_name, sprintf('[%s]', $field['slug']), $field_value );
-
-				// Replace Buddytext Shortcodes with form element values
-				$emailBody = buddyforms_email_replace_shortcode( $emailBody, sprintf('[%s]', $field['slug'] ), $field_value );
-			}
-		}
-
-		$post_link_html = ! empty( $postperma ) ? sprintf( '<a href="%s" target="_blank">%s</a>', $postperma , $postperma ) : '';
-
-		$short_codes_and_values = array(
-			'[user_login]' => $usernameauth,
-			'[user_nicename]' => $user_nicename,
-			'[user_email]' => $user_email,
-			'[first_name]' => $first_name,
-			'[last_name]' => $last_name,
-			'[published_post_link_plain]' => $postperma,
-			'[published_post_link_html]' => $post_link_html,
-			'[published_post_title]' => $post_title,
-			'[site_name]' => $blog_title,
-			'[site_url]' => $siteurl,
-			'[site_url_html]' => $siteurlhtml,
-			'[form_elements_table]' => buddyforms_mail_notification_form_elements_as_table( $form_slug ),
-		);
+		$emailBody = buddyforms_get_field_value_from_string( $emailBody, $post_ID, $form_slug );
 
 		foreach ( $short_codes_and_values as $shortcode => $short_code_value ) {
-			$emailBody = buddyforms_email_replace_shortcode( $emailBody, $shortcode, $short_code_value );
+			$emailBody = buddyforms_replace_shortcode_for_value( $emailBody, $shortcode, $short_code_value );
+		}
+	} else {
+		if ( isset( $buddyforms[ $form_slug ]['form_fields'] ) ) {
+			$emailBody = $short_codes_and_values['[form_elements_table]'];
 		}
 	}
 
 	$emailBody = nl2br( $emailBody );
 
-	// If we do not have any valid eMail Body let us try to create the content from the from elements as table
-	if ( empty( $emailBody ) ) {
-		if ( isset( $buddyforms[ $form_slug ]['form_fields'] ) ) {
-			$emailBody = buddyforms_mail_notification_form_elements_as_table( $form_slug );
-		}
-	}
-
-	buddyforms_email($mail_to, $subject, $from_name, $from_email, $emailBody, $mail_to_cc, $mail_to_bcc);
+	buddyforms_email( $mail_to, $subject, $from_name, $from_email, $emailBody, $mail_to_cc, $mail_to_bcc );
 }
 
 /**
  * Prepare header and body to send and email with wp_email
- *
- * @since 2.2.8
  *
  * @param $mail_to
  * @param $subject
@@ -249,18 +208,21 @@ function buddyforms_send_mail_submissions( $notification, $post ) {
  * @param $email_body
  * @param array $mail_to_cc
  * @param array $mail_to_bcc
+ *
+ * @since 2.2.8
+ *
  */
-function buddyforms_email($mail_to, $subject, $from_name, $from_email, $email_body, $mail_to_cc = array(), $mail_to_bcc = array()){
+function buddyforms_email( $mail_to, $subject, $from_name, $from_email, $email_body, $mail_to_cc = array(), $mail_to_bcc = array() ) {
 	// Create the email header
 	$mail_header = "MIME-Version: 1.0\n";
 	$mail_header .= "X-Priority: 1\n";
 	$mail_header .= "Content-Type: text/html; charset=\"UTF-8\"\n";
 	$mail_header .= "Content-Transfer-Encoding: 7bit\n\n";
 	$mail_header .= "From: $from_name <$from_email>" . "\r\n";
-	$message    = '<html><head></head><body>' . $email_body . '</body></html>';
+	$message     = '<html><head></head><body>' . $email_body . '</body></html>';
 
-	$mail_header .= buddyforms_email_prepare_cc_bcc($mail_to_cc);
-	$mail_header .= buddyforms_email_prepare_cc_bcc($mail_to_bcc, 'Bcc');
+	$mail_header .= buddyforms_email_prepare_cc_bcc( $mail_to_cc );
+	$mail_header .= buddyforms_email_prepare_cc_bcc( $mail_to_bcc, 'bcc' );
 
 	// OK Let us sent the mail
 	wp_mail( $mail_to, $subject, $message, $mail_header );
@@ -269,41 +231,22 @@ function buddyforms_email($mail_to, $subject, $from_name, $from_email, $email_bo
 /**
  * Prepare the string header for Cc or Bcc form array of emails
  *
- * @since 2.2.8
- *
  * @param $email_array
  * @param string $type
  *
  * @return string
+ * @since 2.2.8
+ *
  */
-function buddyforms_email_prepare_cc_bcc( $email_array, $type = 'Cc' ) {
+function buddyforms_email_prepare_cc_bcc( $email_array, $type = 'cc' ) {
 	$result = '';
 	if ( ! empty( $email_array ) && is_array( $email_array ) ) {
 		foreach ( $email_array as $email ) {
-			$result .= sprintf( "%s: %s \r\n", $type, $email );
+			$result .= sprintf( "%s: %s\r\n", $type, $email );
 		}
 	}
 
 	return $result;
-}
-
-/**
- * Replace the shortcode in the body, only if they exist.
- *
- * @param $string
- * @param $shortcode
- * @param $value
- *
- * @since 2.2.7
- *
- * @return mixed
- */
-function buddyforms_email_replace_shortcode( $string, $shortcode, $value ) {
-	if ( strpos( $string, $shortcode ) >= 0 ) {
-		$string = str_replace( $shortcode, $value, $string );
-	}
-
-	return $string;
 }
 
 /**
@@ -323,9 +266,9 @@ add_action( 'transition_post_status', 'buddyforms_transition_post_status', 10, 3
 function buddyforms_transition_post_status( $new_status, $old_status, $post ) {
 	global $form_slug, $buddyforms;
 
-    if ($new_status === $old_status) {
-        return;
-    }
+	if ( $new_status === $old_status ) {
+		return;
+	}
 
 	if ( empty( $form_slug ) ) {
 		$form_slug = get_post_meta( $post->ID, '_bf_form_slug', true );
@@ -350,31 +293,33 @@ function buddyforms_transition_post_status( $new_status, $old_status, $post ) {
  * @param $post
  */
 function buddyforms_send_post_status_change_notification( $post ) {
-
 	global $form_slug, $buddyforms;
 
-	$pub_post = $post;
-	$post_ID  = $post->ID;
+	if ( ! isset( $buddyforms[ $form_slug ] ) ) {
+		return;
+	}
 
-	$author_id  = $pub_post->post_author;
-	$post_title = $pub_post->post_title;
+	$post_ID = $post->ID;
+
+	$author_id  = $post->post_author;
+	$post_title = $post->post_title;
 	$postperma  = get_permalink( $post_ID );
 	$user_info  = get_userdata( $author_id );
 
-	$usernameauth  = $user_info->user_login;
-	$user_nicename = $user_info->user_nicename;
+	$usernameauth  = ! empty( $user_info ) ? $user_info->user_login : '';
+	$user_nicename = ! empty( $user_info ) ? $user_info->user_nicename : '';
 
 	$post_status = get_post_status( $post_ID );
 
 	$mail_notification_trigger = $buddyforms[ $form_slug ]['mail_notification'][ $post_status ];
 
-	$user_email = $user_info->user_email;
+	$user_email = ! empty( $user_info ) ? $user_info->user_email : '';
 
 	$mail_to = array();
 
 	if ( isset( $mail_notification_trigger['mail_to'] ) ) {
 		foreach ( $mail_notification_trigger['mail_to'] as $key => $mail_address ) {
-			if ( $mail_address == 'author' ) {
+			if ( $mail_address == 'author' && ! empty( $user_email ) ) {
 				array_push( $mail_to, $user_email );
 			}
 
@@ -386,102 +331,91 @@ function buddyforms_send_post_status_change_notification( $post ) {
 
 	if ( isset( $mail_notification_trigger['mail_to_address'] ) ) {
 		$mail_to_address = explode( ',', str_replace( ' ', '', $mail_notification_trigger['mail_to_address'] ) );
-		foreach ( $mail_to_address as $key => $mail_address ) {
-			array_push( $mail_to, $mail_address );
+		foreach ( $mail_to_address as $mail_address ) {
+			if ( ! empty( $mail_address ) ) {
+				$mail_address = buddyforms_get_field_value_from_string( $mail_address, $post_ID, $form_slug );
+				array_push( $mail_to, $mail_address );
+			}
 		}
 	}
 
-	$first_name = $user_info->user_firstname;
-	$last_name  = $user_info->user_lastname;
+	$first_name = ! empty( $user_info ) ? $user_info->user_firstname : '';
+	$last_name  = ! empty( $user_info ) ? $user_info->user_lastname : '';
 
 	$blog_title  = get_bloginfo( 'name' );
 	$siteurl     = get_bloginfo( 'wpurl' );
 	$siteurlhtml = "<a href='$siteurl' target='_blank' >$siteurl</a>";
 
-	$subject    = $mail_notification_trigger['mail_subject'];
-	$from_name  = $mail_notification_trigger['mail_from_name'];
-	$from_email = $mail_notification_trigger['mail_from'];
+	$subject    = isset( $_POST['subject'] ) ? $_POST['subject'] : $mail_notification_trigger['mail_subject'];
+	$subject    = buddyforms_get_field_value_from_string( $subject, $post_ID, $form_slug );
+	$from_name  = buddyforms_get_field_value_from_string( $mail_notification_trigger['mail_from_name'], $post_ID, $form_slug );
+	$from_email = buddyforms_get_field_value_from_string( $mail_notification_trigger['mail_from'], $post_ID, $form_slug );
 	$emailBody  = $mail_notification_trigger['mail_body'];
 	$emailBody  = stripslashes( $emailBody );
 
 	$post_link_html = "<a href='$postperma' target='_blank'>$postperma</a>";
 
 	$short_codes_and_values = array(
-		'[user_login]' => $usernameauth,
-		'[user_nicename]' => $user_nicename,
-		'[user_email]' => $user_email,
-		'[first_name]' => $first_name,
-		'[last_name]' => $last_name,
+		'[user_login]'                => $usernameauth,
+		'[user_nicename]'             => $user_nicename,
+		'[user_email]'                => $user_email,
+		'[first_name]'                => $first_name,
+		'[last_name]'                 => $last_name,
 		'[published_post_link_plain]' => $postperma,
-		'[published_post_link_html]' => $post_link_html,
-		'[published_post_title]' => $post_title,
-		'[site_name]' => $blog_title,
-		'[site_url]' => $siteurl,
-		'[site_url_html]' => $siteurlhtml,
+		'[published_post_link_html]'  => $post_link_html,
+		'[published_post_title]'      => $post_title,
+		'[site_name]'                 => $blog_title,
+		'[site_url]'                  => $siteurl,
+		'[site_url_html]'             => $siteurlhtml,
+		'[form_elements_table]'       => buddyforms_mail_notification_form_elements_as_table( $form_slug, $post ),
 	);
 
-	foreach ( $short_codes_and_values as $shortcode => $short_code_value ) {
-		$emailBody = buddyforms_email_replace_shortcode( $emailBody, $shortcode, $short_code_value );
+	// If we have content let us check if there are any tags we need to replace with the correct values.
+	if ( ! empty( $emailBody ) ) {
+		$emailBody = stripslashes( $emailBody );
+		$emailBody = buddyforms_get_field_value_from_string( $emailBody, $post_ID, $form_slug );
+
+		foreach ( $short_codes_and_values as $shortcode => $short_code_value ) {
+			$emailBody = buddyforms_replace_shortcode_for_value( $emailBody, $shortcode, $short_code_value );
+		}
+	} else {
+		if ( isset( $buddyforms[ $form_slug ]['form_fields'] ) ) {
+			$emailBody = $short_codes_and_values['[form_elements_table]'];
+		}
 	}
 
 	$emailBody = nl2br( $emailBody );
 
-	buddyforms_email($mail_to, $subject, $from_name, $from_email, $emailBody);
+	buddyforms_email( $mail_to, $subject, $from_name, $from_email, $emailBody );
 }
 
 
 /**
  * @param $form_slug
+ * @param $post
  *
  * @return string
  */
-function buddyforms_mail_notification_form_elements_as_table( $form_slug ) {
-	global $buddyforms, $post;
+function buddyforms_mail_notification_form_elements_as_table( $form_slug, $post ) {
+	global $buddyforms;
 	$striped_c = 0;
 
 	// Table start
 	$message = '<table rules="all" style="border-color: #666;" cellpadding="10">';
 	// Loop all form elements and add as table row
 	foreach ( $buddyforms[ $form_slug ]['form_fields'] as $key => $field ) {
-
-		$value = isset( $_POST[ $field['slug'] ] ) ? $_POST[ $field['slug'] ] : '';
-
-		// Check if is array
-		if ( is_array( $value ) ) {
-			$field_value = implode( ',', $value );
-		} else {
-			$field_value = $value;
+		if ( in_array( $field['slug'], buddyforms_get_exclude_field_slugs() ) ) {
+			continue;
 		}
-
-		switch ( $field['type'] ) {
-			case 'taxonomy':
-				if ( is_array( $value ) ) {
-					foreach ( $value as $cat ) {
-						$term    = get_term( $cat, $field['taxonomy'] );
-						$terms[] = $term->name;
-					}
-					$field_value = implode( ',', $terms );
-				} else {
-					$term        = get_term( $value, $field['taxonomy'] );
-					$field_value = $term->name;
-				}
-				break;
-			case 'link':
-				$field_value = "<p><a href='" . $value . "' " . $field['name'] . ">" . $value . " </a></p>";
-				break;
-			case 'user_website':
-				$field_value = "<p><a href='" . $value . "' " . $field['name'] . ">" . $value . " </a></p>";
-				break;
-		}
-
 		$striped = ( $striped_c ++ % 2 == 1 ) ? "style='background: #eee;'" : '';
 		// Check if the form element exist and have is not empty.
-		if ( isset( $_POST[ $field['slug'] ] ) && ! empty( $_POST[ $field['slug'] ] ) ) {
-			$message .= "<tr " . $striped . "><td><strong>" . $field['name'] . "</strong> </td><td>" . $field_value . "</td></tr>";
-		}
+		$message .= "<tr " . $striped . "><td><strong>" . $field['name'] . "</strong> </td><td>[" . $field['slug'] . "]</td></tr>";
 	}
 	// Table end
 	$message .= "</table>";
+
+	//Convert all field shortcode into field values
+	$message = buddyforms_get_field_value_from_string( $message, $post->ID, $form_slug );
 
 	// Let us return the form elements table
 	return $message;

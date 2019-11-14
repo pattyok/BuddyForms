@@ -11,7 +11,7 @@ function buddyforms_user_profile_fields( $user ) {
 
 	global $buddyforms;
 
-	if ( isset( $buddyforms ) ) {
+	if ( !empty( $buddyforms ) && is_array($buddyforms) ) {
 		foreach ( $buddyforms as $form_slug => $buddyform ) {
 			if ( $buddyform['form_type'] == 'registration' && isset( $buddyform['form_fields'] ) ) {
 
@@ -27,7 +27,6 @@ function buddyforms_user_profile_fields( $user ) {
 						$element_attr = array(
 							'value' => esc_attr( get_the_author_meta( $user_meta['slug'], $user->ID ) )
 						);
-
 
 						switch ( sanitize_title( $user_meta['type'] ) ) {
 
@@ -142,6 +141,8 @@ function update_extra_profile_fields( $user_id ) {
 			foreach ( $buddyforms as $form_slug => $buddyform ) {
 				if ( $buddyform['form_type'] == 'registration' && isset( $buddyform['form_fields'] ) ) {
 					foreach ( $buddyform['form_fields'] as $key => $user_meta ) {
+						//TODO this need to be improved, because exist the possibility to write
+						// the 2 field in different forms just becasue they have the same slug
 						buddyforms_update_user_meta( $user_id, $user_meta['type'], $user_meta['slug'] );
 					}
 				}
@@ -192,7 +193,7 @@ function buddyforms_get_mapped_slug_from_user_meta( $slug ) {
 		case 'user_pass':
 			$slug = 'first_name';
 			break;
-		case 'user_website':
+		case 'website':
 			$slug = 'user_url';
 			break;
 		case 'user_bio':
@@ -233,6 +234,7 @@ function buddyforms_get_value_from_user_meta( $user_id, $slug ) {
  */
 function buddyforms_avoid_user_fields_in_forms() {
 	return apply_filters( 'buddyforms_avoid_user_fields', array(
+		'captcha',
 		'user_login',
 		'user_email',
 		'user_first',

@@ -32,7 +32,7 @@ class Element_Checkbox extends OptionElement {
 		}
 
 		$count = 0;
-		echo '<div class="bf-input"><div class="checkbox">';
+		echo '<div class="checkbox">';
 		foreach ( $this->options as $value => $text ) {
 			$value = $this->getOptionValue( $value );
 
@@ -40,6 +40,7 @@ class Element_Checkbox extends OptionElement {
 			$id = isset( $this->_attributes["id"] ) ? ' id="' . $this->_attributes["id"] . '-' . $count . '"' : '';
 
 			echo '<label class="' , $labelClass , ' ' , sanitize_title($value) , '">';
+
 			echo '<input', $id, $this->getAttributes( array(
 				"id",
 				"class",
@@ -55,7 +56,7 @@ class Element_Checkbox extends OptionElement {
 				echo '</div><div class="checkbox">';
 			}
 		}
-		echo '</div>';
+		echo '';
 		if ( $this->getAttribute( 'frontend_reset' ) ) {
 			echo '<a href="#" class="button bf_reset_multi_input" data-group-name="' . $this->getAttribute( 'name' ) . '">' . __( 'Reset', 'buddyforms' ) . '</a>';
 		}

@@ -9,9 +9,81 @@ function buddyforms_ajax_edit_post() {
 		'post_id'   => $post_id,
 		'form_slug' => $form_slug
 	);
-	echo buddyforms_create_edit_form( $args );
+	ob_start();
+	buddyforms_create_edit_form( $args );
+	$content = ob_get_clean();
+	echo $content;
 	die();
+}
 
+add_action( 'wp_ajax_bf_load_taxonomy', 'buddyforms_ajax_load_taxonomy' );
+add_action( 'wp_ajax_nopriv_bf_load_taxonomy', 'buddyforms_ajax_load_taxonomy' );
+function buddyforms_ajax_load_taxonomy(){
+	if (! (is_array($_POST) && defined('DOING_AJAX') && DOING_AJAX)) {
+		return;
+	}
+
+	if ( ! isset($_POST['action']) || wp_verify_nonce($_POST['nonce'], 'bf_tax_loading') === false ) {
+		wp_die();
+	}
+
+	$args = array(
+		'fields'       => 'id=>name',
+		'hide_empty'   => 0,
+		'child_of'     => 0,
+		'orderby'      => 'SLUG',
+		'cache_domain' => 'buddyforms_ajax_load_taxonomy',
+	);
+
+	$form_slug = '';
+	if ( empty( $_POST['form_slug'] ) ) {
+		wp_send_json_error( new WP_Error( 'invalid_form_slug', 'Invalid Form Slug' ), 500 );
+	} else {
+		$form_slug = sanitize_title( $_POST['form_slug'] );
+	}
+
+	if ( ! empty( $_POST['search'] ) ) {
+		$args['search'] = sanitize_title_for_query( $_POST['search'] );
+	}
+
+	if ( ! empty( $_POST['taxonomy'] ) ) {
+		$args['taxonomy'] = $_POST['taxonomy'];
+	}
+
+	if ( ! empty( $_POST['order'] ) ) {
+		$args['order'] = $_POST['order'];
+	}
+
+	if ( ! empty( $_POST['exclude'] ) ) {
+		$args['exclude'] = $_POST['exclude'];
+	}
+
+	if ( ! empty( $_POST['include'] ) ) {
+		$args['include'] = $_POST['include'];
+	}
+
+	$terms_result = false;
+
+	$terms_result = apply_filters( 'buddyforms_ajax_load_term_query', $terms_result, $args, $form_slug );
+
+	if ( empty( $terms_result ) ) {
+		$terms_result = new WP_Term_Query( $args );
+	}
+
+	if ( is_wp_error( $terms_result ) ) {
+		wp_send_json_error( $terms_result, 500 );
+	} else {
+		$response = new stdClass;
+		$result   = array();
+		foreach ( $terms_result->get_terms() as $key => $term ) {
+			$current       = new stdClass;
+			$current->id   = $key;
+			$current->text = $term;
+			$result[]      = $current;
+		}
+		$response->results = $result;
+		wp_send_json( $response );
+	}
 }
 
 add_action( 'wp_ajax_buddyforms_ajax_process_edit_post', 'buddyforms_ajax_process_edit_post' );
@@ -19,13 +91,16 @@ add_action( 'wp_ajax_nopriv_buddyforms_ajax_process_edit_post', 'buddyforms_ajax
 function buddyforms_ajax_process_edit_post() {
 	global $buddyforms;
 
-	if ( isset( $_POST['data'] ) ) {
-		parse_str( $_POST['data'], $formdata );
-		$_POST = $formdata;
-	}
-	
+	$form_data = array();
 
-	$args = buddyforms_process_submission( $formdata );
+	if ( isset( $_POST['data'] ) ) {
+		parse_str( $_POST['data'], $form_data );
+		$_POST = $form_data;
+	}
+
+	$global_error = ErrorHandler::get_instance();
+
+	$args = buddyforms_process_submission( $form_data );
 
 	$hasError = false;
 	$form_notice = '';
@@ -33,30 +108,25 @@ function buddyforms_ajax_process_edit_post() {
 
 	$json_array = array();
 
-    $error_message = __('There was an error please check the form!', 'buddyforms');
-	
 	extract( $args );
 
 	if ( empty( $form_slug ) ) {
-		$form_slug = $formdata['form_slug'];
+		$form_slug = $form_data['form_slug'];
 	}
 
 	if ( $hasError == true ) {
-		
+
 		if ( $form_notice ) {
-			Form::setError( 'buddyforms_form_' . $form_slug, $form_notice );
+			$global_error->add_error(new BF_Error('buddyforms_form_' . $form_slug, $form_notice, $form_data, $form_slug));
 		}
 
-		if ( $error_message ) {
-			Form::setError( 'buddyforms_form_' . $form_slug, $error_message );
+		if ( ! empty( $error_message ) ) {
+			$global_error->add_error( new BF_Error( 'buddyforms_form_' . $form_slug, $error_message, $form_data, $form_slug ) );
 		}
 
-		Form::renderAjaxErrorResponse( 'buddyforms_form_' . $form_slug );
+		$global_error->renderAjaxErrorResponse();
 
 	} else {
-
-		Form::renderAjaxErrorResponse( 'buddyforms_form_' . $form_slug );
-
 		$form_type = ( ! empty( $args['form_type'] ) ) ? $args['form_type'] : 'submission';
 		$form_action = ( ! empty( $args['action'] ) ) ? $args['action'] : 'save';
 		$message_source = 'after_submit_message_text';
@@ -72,19 +142,19 @@ function buddyforms_ajax_process_edit_post() {
 		$display_message = buddyforms_form_display_message($form_slug, $args['post_id'], $message_source);
 		$args['form_notice'] = $display_message;
 
-		if ( isset( $buddyforms[ $_POST['form_slug'] ]['after_submit'] ) ) {
-			switch ( $buddyforms[ $_POST['form_slug'] ]['after_submit'] ) {
+		if ( isset( $buddyforms[ $form_slug ]['after_submit'] ) ) {
+			switch ( $buddyforms[ $form_slug ]['after_submit'] ) {
 				case 'display_post':
 					$json_array['form_remove'] = 'true';
 					$json_array['form_notice'] = buddyforms_after_save_post_redirect( get_permalink( $args['post_id'] ) );
 					break;
 				case 'display_page':
 					$json_array['form_remove'] = 'true';
-					$json_array['form_notice'] = apply_filters( 'the_content', get_post_field( 'post_content', $buddyforms[ $_POST['form_slug'] ]['after_submission_page'] ) );
+					$json_array['display_page'] = apply_filters( 'the_content', get_post_field( 'post_content', $buddyforms[ $form_slug ]['after_submission_page'] ) );
 					break;
 				case 'redirect':
 					$json_array['form_remove'] = 'true';
-					$json_array['form_notice'] = buddyforms_after_save_post_redirect( $buddyforms[ $_POST['form_slug'] ]['after_submission_url'] );
+					$json_array['form_notice'] = buddyforms_after_save_post_redirect( $buddyforms[ $form_slug ]['after_submission_url'] );
 					break;
 				case 'display_posts_list':
 					$json_array['form_remove'] = 'true';
@@ -181,7 +251,7 @@ function buddyforms_ajax_delete_post() {
 	// check if the user has the roles roles and capabilities
 	$user_can_delete = false;
 
-	if ( current_user_can( 'buddyforms_' . $form_slug . '_delete' ) ) {
+	if ( bf_user_can( $current_user->ID, 'buddyforms_' . $form_slug . '_delete', array(), $form_slug ) ) {
 		$user_can_delete = true;
 	}
 	$user_can_delete = apply_filters( 'buddyforms_user_can_delete', $user_can_delete, $form_slug, $post_id );

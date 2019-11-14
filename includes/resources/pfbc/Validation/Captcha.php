@@ -7,7 +7,7 @@ class Validation_Captcha extends Validation {
 	/**
 	 * @var string
 	 */
-	protected $message = "Error: The reCATPCHA response provided was incorrect.  Please re-try.";
+	protected $message = "Error: The reCATPCHA response provided was incorrect.  Please try again.";
 	/**
 	 * @var string
 	 */
@@ -31,14 +31,12 @@ class Validation_Captcha extends Validation {
 	 *
 	 * @return bool
 	 */
-	public function isValid( $value ) {
+	public function isValid( $value, $element ) {
 		$captcha = sanitize_text_field( $_POST["g-recaptcha-response"] );
 		$resp    = $this->validate_google_captcha( $captcha, $this->privateKey );
-		if ( ! empty( $resp['success'] ) && boolval( $resp['success'] ) === true ) {
-			return true;
-		} else {
-			return false;
-		}
+		$result  = ! empty( $resp['success'] ) && boolval( $resp['success'] ) === true;
+
+		return apply_filters( 'buddyforms_element_captcha_validation', $result, $element );
 	}
 
 	public function validate_google_captcha( $captcha, $secret ) {

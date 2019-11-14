@@ -19,21 +19,29 @@ function buddyforms_server_validation( $valid, $form_slug ) {
 	$form = $buddyforms[ $form_slug ];
 
 	if ( isset( $form['form_fields'] ) ) {
+		$global_error = ErrorHandler::get_instance();
 		foreach ( $form['form_fields'] as $key => $form_field ) {
 
-			if ( isset( $form_field['validation_min'] ) && $form_field['validation_min'] > 0 && isset( $form_field['validation_max'] ) && $form_field['validation_max'] > 0 ) {
-				if ( ! is_numeric( $_POST[ $form_field['slug'] ] ) || ( ( $form_field['validation_min'] === $form_field['validation_max'] ) && $_POST[ $form_field['slug'] ] !== $form_field['validation_min'] ) ) {
-					$valid                    = false;
-					$validation_error_message = __( 'Please enter a value equal to ', 'buddyforms' ) . $form_field['validation_min'];
-					Form::setError( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] );
-				}
+			//if field not have a value send in the $_POST pass to next one
+			// @since 4.2.3
+			if ( ! isset( $_POST[ $form_field['slug'] ] ) ) {
+				continue;
 			}
+
+			//If the value of the field is empty then don´t run the validation
+            //This means that the field is not mandatory and empty values are allowed.
+            if (isset( $_POST[ $form_field['slug'] ] ) ) {
+			    $field_value = $_POST[ $form_field['slug'] ];
+			    if(empty($field_value)){
+                    continue;
+                }
+            }
 
 			if ( isset( $form_field['validation_min'] ) && $form_field['validation_min'] > 0 ) {
 				if ( ! is_numeric( $_POST[ $form_field['slug'] ] ) || ( ( $form_field['validation_min'] !== $form_field['validation_max'] ) && $_POST[ $form_field['slug'] ] < $form_field['validation_min'] ) ) {
 					$valid                    = false;
 					$validation_error_message = __( 'Please enter a value greater than or equal to ', 'buddyforms' ) . $form_field['validation_min'];
-					Form::setError( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] );
+					$global_error->add_error(new BF_Error( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] ));
 				}
 			}
 
@@ -41,7 +49,7 @@ function buddyforms_server_validation( $valid, $form_slug ) {
 				if ( ! is_numeric( $_POST[ $form_field['slug'] ] ) || ( ( $form_field['validation_min'] !== $form_field['validation_max'] ) && $_POST[ $form_field['slug'] ] > $form_field['validation_max'] ) ) {
 					$valid                    = false;
 					$validation_error_message = __( 'Please enter a value less than or equal to ', 'buddyforms' ) . $form_field['validation_max'];
-					Form::setError( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] );
+					$global_error->add_error(new BF_Error( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] ));
 				}
 			}
 
@@ -49,7 +57,7 @@ function buddyforms_server_validation( $valid, $form_slug ) {
 				if ( strlen( trim( $_POST[ $form_field['slug'] ] ) ) < $form_field['validation_minlength'] ) {
 					$valid                    = false;
 					$validation_error_message = sprintf( __( 'Please enter at least %d characters.', 'buddyforms' ), $form_field['validation_minlength'] );
-					Form::setError( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] );
+					$global_error->add_error(new BF_Error( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] ));
 				}
 			}
 
@@ -57,7 +65,7 @@ function buddyforms_server_validation( $valid, $form_slug ) {
 				if ( strlen( trim( $_POST[ $form_field['slug'] ] ) ) > $form_field['validation_maxlength'] ) {
 					$valid                    = false;
 					$validation_error_message = sprintf( __( 'Please enter no more than %d characters.', 'buddyforms' ), $form_field['validation_maxlength'] );
-					Form::setError( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] );
+					$global_error->add_error(new BF_Error( 'buddyforms_form_' . $form_slug, $validation_error_message, $form_field['name'] ));
 				}
 			}
 
@@ -71,6 +79,7 @@ function buddyforms_server_validation( $valid, $form_slug ) {
 /*
  * Browser Validation - Generate the jquery validation js
  *
+ * @deprecated since 2.5.0
  */
 function buddyforms_jquery_validation() {
 	global $buddyforms;
@@ -80,8 +89,6 @@ function buddyforms_jquery_validation() {
 	}
 
 	$form_html = '<script type="text/javascript">';
-	$form_html .= ' var ajaxurl = "' . admin_url( 'admin-ajax.php' ) . '";
-	';
 
 	foreach ( $buddyforms as $form_slug => $form ) {
 			// Create the needed Validation JS.
@@ -103,7 +110,7 @@ function buddyforms_jquery_validation() {
     //allow the validate script to be altered
     $form_html .= apply_filters('buddyforms_jquery_validator_init', $validator_init, $form_slug);
 
-    $field_types_avoid_jquery_validation = apply_filters( 'buddyforms_jquery_validator_field_to_pass', array('upload','featured_image'));
+    $field_types_avoid_jquery_validation = apply_filters( 'buddyforms_jquery_validator_field_to_pass', array( 'upload', 'featured_image' ) );
 
     $form_html .= 'if (jQuery.validator) {
       setTimeout(function() {';
@@ -116,8 +123,8 @@ function buddyforms_jquery_validation() {
 
 				if ( isset( $form_field['required'] ) ) {
 
-					$form_html .= '
-				jQuery("form [name=\'' . $form_field['slug'] . '\']").rules("add", { ';
+
+					$form_html .= 'jQuery("form [name=\'' . $form_field['slug'] . '\']:active").rules("add", { ';
 
 					$form_html .= 'required: true, ';
 
@@ -145,7 +152,7 @@ function buddyforms_jquery_validation() {
 
 			if ( isset( $form_field['type'] ) && $form_field['type'] == 'gdpr' && isset( $form_field['options'] ) ) {
 				foreach ( $form_field['options'] as $key => $option ) {
-					$form_html                .= 'jQuery("form [name=\'' . $form_field['slug'] . '_' . $key . '[]\']").rules("add", { ';
+					$form_html                .= 'jQuery("form [name=\'' . $form_field['slug'] . '_' . $key . '[]\']:active").rules("add", { ';
 					$validation_error_message = isset( $option['error_message'] ) ? $option['error_message'] : __( 'This field is required.', 'buddyforms' );
 					$form_html                .= ' messages:{ required: "' . $validation_error_message . '" }';
 					$form_html                .= '});';
@@ -196,7 +203,7 @@ function buddyforms_sanitize( $type, $value ) {
 			$value = is_numeric( $value ) ? $value : 0;
 			break;
 		case 'title':
-			$value = sanitize_title( $value );
+			$value = sanitize_text_field( $value );
 			break;
 		case 'content':
 			$value = esc_textarea( $value );
@@ -214,9 +221,12 @@ function buddyforms_sanitize( $type, $value ) {
 			$value = esc_url( $value );
 			break;
 		default :
-			$value = apply_filters( 'buddyforms_sanitize', $value, $type );
+			if ( is_array( $value ) ) {
+				array_walk_recursive( $value, 'sanitize_text_field' );
+			} else {
+				$value = apply_filters( 'buddyforms_sanitize', sanitize_text_field( $value ), $type );
+			}
 			break;
-
 	}
 
 	return $value;
